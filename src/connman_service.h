@@ -86,6 +86,7 @@ enum {
 	CONNMAN_SERVICE_TYPE_UNKNOWN = 0,
 	CONNMAN_SERVICE_TYPE_ETHERNET,
 	CONNMAN_SERVICE_TYPE_WIFI,
+	CONNMAN_SERVICE_TYPE_CELLULAR,
 	CONNMAN_SERVICE_TYPE_MAX
 };
 
@@ -109,22 +110,13 @@ enum {
 typedef void (*connman_service_connect_cb)(gboolean success, gpointer user_data);
 
 /**
- * Check if the type of the service is wifi
+ * Check if the type of the service is the specified one
  *
  * @param[IN]  service A service instance
  *
- * @return TRUE if the service has "wifi" type
+ * @return TRUE if the service has the specified type
  */
-extern gboolean connman_service_type_wifi(connman_service_t *service);
-
-/**
- * Check if the type of the service is ethernet
- *
- * @param[IN]  service A service instance
- *
- * @return TRUE if the service has "ethernet" type
- */
-extern gboolean connman_service_type_ethernet(connman_service_t *service);
+extern gboolean connman_check_service_type(connman_service_t *service, int type);
 
 /**
  * Stringify the service connection status to corresponding webos state

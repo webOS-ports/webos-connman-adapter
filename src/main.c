@@ -63,7 +63,13 @@ main(int argc, char **argv)
 	return -1;
     }
 
-    g_main_loop_run(mainloop);
+	if (initialize_wan_ls2_calls(mainloop) < 0)
+	{
+		g_warning("Error in initializing com.palm.wan service");
+		return -1;
+	}
+
+	g_main_loop_run(mainloop);
 
     g_main_loop_unref(mainloop);
 

@@ -27,25 +27,14 @@
 #include "utils.h"
 
 /**
- * Check if the type of the service is wifi (see header for API details)
- */
-
-gboolean connman_service_type_wifi(connman_service_t *service)
-{
-	if(NULL == service)
-		return FALSE;
-	return service->type == CONNMAN_SERVICE_TYPE_WIFI;
-}
-
-/**
  * Check if the type of the service is ethernet (see header for API details)
  */
 
-gboolean connman_service_type_ethernet(connman_service_t *service)
+gboolean connman_check_service_type(connman_service_t *service, int type)
 {
-	if(NULL == service)
+	if (NULL == service)
 		return FALSE;
-	return service->type == CONNMAN_SERVICE_TYPE_ETHERNET;
+	return service->type == type;
 }
 
 /**

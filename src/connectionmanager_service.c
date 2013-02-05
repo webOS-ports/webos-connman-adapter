@@ -79,7 +79,7 @@ static void update_connection_status(connman_service_t *connected_service, jvalu
 
 		if(NULL != connected_service->ipinfo.ipv4.method)
 			jobject_put(*status, J_CSTR_TO_JVAL("method"), jstring_create(connected_service->ipinfo.ipv4.method));
-		if(connman_service_type_wifi(connected_service))
+		if(connman_check_service_type(connected_service, CONNMAN_SERVICE_TYPE_WIFI))
 		{
 			if(NULL != connected_service->name)
 				jobject_put(*status, J_CSTR_TO_JVAL("ssid"), jstring_create(connected_service->name));
@@ -431,7 +431,7 @@ Exit:
 
 static gboolean is_wifi_powered(void)
 {
-	connman_technology_t *technology = connman_manager_find_wifi_technology(manager);
+	connman_technology_t *technology = connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI);
 	if(NULL != technology)
 		return technology->powered;
 	else
@@ -446,7 +446,7 @@ static gboolean is_wifi_powered(void)
 
 static gboolean set_wifi_state(bool state)
 {
-	return connman_technology_set_powered(connman_manager_find_wifi_technology(manager),state);
+	return connman_technology_set_powered(connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI),state);
 }
 
 /**
@@ -456,7 +456,7 @@ static gboolean set_wifi_state(bool state)
 
 static gboolean is_ethernet_powered(void)
 {
-	connman_technology_t *technology = connman_manager_find_ethernet_technology(manager);
+	connman_technology_t *technology = connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_ETHERNET);
 	if(NULL != technology)
 		return technology->powered;
 	else
@@ -471,7 +471,7 @@ static gboolean is_ethernet_powered(void)
 
 static gboolean set_ethernet_state(bool state)
 {
-	return connman_technology_set_powered(connman_manager_find_ethernet_technology(manager),state);
+	return connman_technology_set_powered(connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_ETHERNET),state);
 }
 
 /**

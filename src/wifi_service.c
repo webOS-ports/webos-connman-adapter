@@ -85,7 +85,7 @@ static void connection_settings_free(connection_settings_t *settings)
 
 static gboolean is_wifi_powered(void)
 {
-	connman_technology_t *technology = connman_manager_find_wifi_technology(manager);
+	connman_technology_t *technology = connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI);
 	if(NULL != technology)
 		return technology->powered;
 	else
@@ -100,7 +100,7 @@ static gboolean is_wifi_powered(void)
 
 static gboolean set_wifi_state(bool state)
 {
-	return connman_technology_set_powered(connman_manager_find_wifi_technology(manager),state);
+	return connman_technology_set_powered(connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI),state);
 }
 
 /**
@@ -113,7 +113,7 @@ static gboolean set_wifi_state(bool state)
 
 static gboolean wifi_technology_status_check(LSHandle *sh, LSMessage *message)
 {
-	if(NULL == connman_manager_find_wifi_technology(manager))
+	if(NULL == connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI))
 	{
 		LSMessageReplyCustomError(sh, message, "WiFi technology unavailable");
 		return false;
@@ -675,7 +675,7 @@ static void technology_property_changed_callback(gpointer data, const gchar *pro
 	if(NULL == technology)
 		return;
 
-	if(connman_manager_find_wifi_technology(manager) != technology)
+	if(connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI) != technology)
 	{
 		g_message("Ignoring signals for non-wifi technologies");
 		return;
@@ -907,7 +907,7 @@ static bool handle_scan_command(LSHandle *sh, LSMessage *message, void* context)
 		goto cleanup;
 	}
 
-	connman_technology_t *wifi_tech = connman_manager_find_wifi_technology(manager);
+	connman_technology_t *wifi_tech = connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI);
 	if(NULL == wifi_tech)
 	{
 		LSMessageReplySuccess(sh, message);
@@ -1376,10 +1376,10 @@ int initialize_wifi_ls2_calls( GMainLoop *mainloop )
 	/* Register for manager's "PropertyChanged" and "ServicesChanged" signals for sending 'getstatus' and 'findnetworks'
 	   methods to their subscribers */
 	connman_manager_register_property_changed_cb(manager, manager_property_changed_callback);
-	connman_manager_register_services_changed_cb(manager, manager_services_changed_callback);
+	connman_manager_register_services_changed_cb(manager, manager_services_changed_callback, manager);
 
 	/* Register for WiFi technology's "PropertyChanged" signal*/
-	connman_technology_t *technology = connman_manager_find_wifi_technology(manager);
+	connman_technology_t *technology = connman_manager_find_technology(manager, CONNMAN_TECHNOLOGY_WIFI);
 	if(technology)
 	{
 		connman_technology_register_property_changed_cb(technology, technology_property_changed_callback);

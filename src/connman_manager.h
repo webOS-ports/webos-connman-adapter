@@ -31,13 +31,16 @@
 #include "connman_service.h"
 #include "connman_technology.h"
 
+#define CONNMAN_TECHNOLOGY_ETHERNET   "ethernet"
+#define CONNMAN_TECHNOLOGY_WIFI       "wifi"
+#define CONNMAN_TECHNOLOGY_CELLULAR   "cellular"
+
 /**
  * Callback function for handling any changes in connman services
  *
  * @param[IN] gpointer Any data to pass to this function
  */
 typedef void (*connman_services_changed_cb)(gpointer);
-
 
 /**
  * Local instance of a connman manager
@@ -50,9 +53,11 @@ typedef struct connman_manager
 	ConnmanInterfaceManager	*remote;
 	GSList	*wifi_services;
 	GSList	*wired_services;
+	GSList	*cellular_services;
 	GSList	*technologies;
 	connman_property_changed_cb	handle_property_change_fn;
 	connman_services_changed_cb	handle_services_change_fn;
+	GSList *services_changed_handlers;
 }connman_manager_t;
 
 /**
@@ -75,22 +80,14 @@ extern gboolean connman_manager_is_manager_available (connman_manager_t *manager
 extern gboolean connman_manager_is_manager_online (connman_manager_t *manager);
 
 /**
- * Go through the manager's technologies list and get the technology with type "wifi"
+ * Go through the manager's technologies list and get the technology with the specified type
  *
  * @param[IN]  manager A manager instance
+ * @param[IN]  type Type of the technology to search (Possible values are: wifi, ethernet, cellular)
  *
- * @return Technology with type "wifi"
+ * @return Technology of the specified type or NULL if not found
  */
-extern connman_technology_t *connman_manager_find_wifi_technology(connman_manager_t *manager);
-
-/**
- * Go through the manager's technologies list and get the technology with type "wired"
- *
- * @param[IN]  manager A manager instance
- *
- * @return Technology with type "wired"
- */
-extern connman_technology_t *connman_manager_find_ethernet_technology(connman_manager_t *manager);
+extern connman_technology_t *connman_manager_find_technology(connman_manager_t *manager, const char *type);
 
 /**
  * Go through the manager's given services list and get the one which is in "ready" or 
@@ -117,8 +114,9 @@ extern void connman_manager_register_property_changed_cb(connman_manager_t *mana
  *
  * @param[IN] manager A manager instance
  * @param[IN] func User function to register
+ * @param[IN] data User data to pass to the func when called
  */
-extern void connman_manager_register_services_changed_cb(connman_manager_t *manager, connman_services_changed_cb func);
+extern void connman_manager_register_services_changed_cb(connman_manager_t *manager, connman_services_changed_cb func, gpointer data);
 
 /**
  * Register a agent instance on the specified dbus path with the manager
