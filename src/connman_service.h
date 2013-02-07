@@ -76,7 +76,7 @@ typedef struct connman_service
   	gint type;
 	ipinfo_t ipinfo;
 	gulong sighandler_id;
-	connman_state_changed_cb handle_state_change_fn;
+	connman_property_changed_cb handle_property_change_fn;
 }connman_service_t;
 
 /**
@@ -225,14 +225,14 @@ extern GVariant *connman_service_fetch_properties(connman_service_t *service);
 extern void connman_service_update_properties(connman_service_t *service, GVariant *service_v);
 
 /**
- * Register for service's state changed case, calling the provided function whenever the callback function
+ * Register for service's property changed case, calling the provided function whenever the callback function
  * for the signal is called
  *
  * @param[IN] service A service instance
  * @param[IN] func User function to register
  *
  */
-extern void connman_service_register_state_changed_cb(connman_service_t *service, connman_state_changed_cb func);
+extern void connman_service_register_property_changed_cb(connman_service_t *service, connman_property_changed_cb func);
 
 /**
  * Create a new connman service instance and set its properties

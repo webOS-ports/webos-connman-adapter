@@ -245,13 +245,16 @@ static void send_connection_status_to_subscribers(void)
  *  @param value
  */
 
-static void service_state_changed_callback(gpointer data, const gchar *new_state)
+static void service_state_changed_callback(gpointer data, const gchar *key, GVariant *value)
 {
 	connman_service_t *service = (connman_service_t *)data;
 	if(NULL == service)
 		return;
-	g_message("Service %s state changed to %s",service->name, new_state);
 
+	if (!g_str_equal(key, "State"))
+		return;
+
+	g_message("Service %s state changed to %s",service->name, service->state);
 	int service_state = connman_service_get_state(service->state);
 	switch(service_state)
 	{
@@ -341,7 +344,7 @@ static void add_service(connman_service_t *service, jvalue_ref *network)
 			jobject_put(*network, J_CSTR_TO_JVAL("connectState"),jstring_create(connman_service_get_webos_state(connman_service_get_state(service->state)))); 
 			/* Register for 'state changed' signal for this service to update its connection status */
 			/* The hidden services, once connected, get added as a new service in "association" state */
-			connman_service_register_state_changed_cb(service, service_state_changed_callback);
+			connman_service_register_property_changed_cb(service, service_state_changed_callback);
 		}
 	}
 }
@@ -537,7 +540,7 @@ static void connect_wifi_with_ssid(const char *ssid, jvalue_ref req_object, luna
 				}
 			}
 			/* Register for 'state changed' signal for this service to update its connection status */
-			connman_service_register_state_changed_cb(service, service_state_changed_callback);
+			connman_service_register_property_changed_cb(service, service_state_changed_callback);
 			break;
 		}
 	}

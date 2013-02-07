@@ -346,6 +346,51 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 	return TRUE;
 }
 
+static void update_service_property(connman_service_t *service, const gchar *key, GVariant *val)
+{
+	if (g_str_equal(key, "Name"))
+		service->name =  g_variant_dup_string(val, NULL);
+	else if (g_str_equal(key, "Type"))
+	{
+		const gchar *v = g_variant_get_string(val, NULL);
+
+		if (g_str_equal(v, "wifi"))
+			service->type = CONNMAN_SERVICE_TYPE_WIFI;
+		else if (g_str_equal(v, "ethernet"))
+			service->type = CONNMAN_SERVICE_TYPE_ETHERNET;
+		else if (g_str_equal(v, "cellular"))
+			service->type = CONNMAN_SERVICE_TYPE_CELLULAR;
+	}
+	else if (g_str_equal(key, "State"))
+	{
+		if (service->state)
+			g_free(service->state);
+
+		service->state =  g_variant_dup_string(val, NULL);
+
+		// Only a hidden service gets added as a new service with "association" state
+		if(g_str_equal(service->state, "association"))
+			service->hidden = TRUE;
+	}
+	else if (g_str_equal(key, "Strength"))
+		service->strength = g_variant_get_byte(val);
+	else if(g_str_equal(key, "Security"))
+	{
+		if (service->security)
+			g_free(service->security);
+
+		service->security = g_variant_dup_strv(val, NULL);
+	}
+	else if (g_str_equal(key, "AutoConnect"))
+		service->auto_connect = g_variant_get_boolean(val);
+	else if (g_str_equal(key, "Immutable"))
+		service->immutable = g_variant_get_boolean(val);
+	else if (g_str_equal(key, "Favorite"))
+		service->favorite = g_variant_get_boolean(val);
+
+	if (service->handle_property_change_fn)
+		service->handle_property_change_fn(service, key, val);
+}
 
 /**
  * Callback for service's "property_changed" signal
@@ -355,24 +400,18 @@ static void
 property_changed_cb(ConnmanInterfaceService *proxy, gchar * property, GVariant *v,
               connman_service_t      *service)
 {
-	/* Invoke function pointers only for state changed */
-	if(g_str_equal(property, "State") == FALSE)
-		return;
-	g_free(service->state);
-	service->state = g_variant_dup_string(g_variant_get_variant(v), NULL);
-
-	if(NULL != service->handle_state_change_fn)
-		(service->handle_state_change_fn)((gpointer)service, service->state);
+	GVariant *val = g_variant_get_variant(v);
+	update_service_property(service, property, val);
 }
 
 /**
- * Register for service's state changed case  (see header for API details)
+ * Register for service's property changed case  (see header for API details)
  */
-void connman_service_register_state_changed_cb(connman_service_t *service, connman_state_changed_cb func)
+void connman_service_register_property_changed_cb(connman_service_t *service, connman_property_changed_cb func)
 {
 	if(NULL == func)
 		return;
-        service->handle_state_change_fn = func;
+        service->handle_property_change_fn = func;
 }
 
 /** 
@@ -412,35 +451,8 @@ void connman_service_update_properties(connman_service_t *service, GVariant *pro
 		GVariant *val_v = g_variant_get_child_value(property, 1);
 		GVariant *val = g_variant_get_variant(val_v);
 		const gchar *key = g_variant_get_string(key_v, NULL);
-		if (g_str_equal(key, "Name"))
-			service->name =  g_variant_dup_string(val, NULL);
-		else if (g_str_equal(key, "Type"))
-		{
-			const gchar *v = g_variant_get_string(val, NULL);
 
-			if (g_str_equal(v, "wifi"))
-				service->type = CONNMAN_SERVICE_TYPE_WIFI;
-
-			if (g_str_equal(v, "ethernet"))
-				service->type = CONNMAN_SERVICE_TYPE_ETHERNET;
-		}
-		else if (g_str_equal(key, "State"))
-		{
-			service->state =  g_variant_dup_string(val, NULL);
-			// Only a hidden service gets added as a new service with "association" state
-			if(g_str_equal(service->state, "association"))
-				service->hidden = TRUE;
-		}
-		else if (g_str_equal(key, "Strength"))
-			service->strength = g_variant_get_byte(val);
-		else if(g_str_equal(key, "Security"))
-			service->security = g_variant_dup_strv(val, NULL);
-		else if (g_str_equal(key, "AutoConnect"))
-			service->auto_connect = g_variant_get_boolean(val);
-		else if (g_str_equal(key, "Immutable"))
-			service->immutable = g_variant_get_boolean(val);
-		else if (g_str_equal(key, "Favorite"))
-			service->favorite = g_variant_get_boolean(val);
+		update_service_property(service, key, val);
 	}
 }
 
@@ -480,7 +492,7 @@ connman_service_t *connman_service_new(GVariant *variant)
 		return NULL;
 	}
 
-	service->handle_state_change_fn = NULL;
+	service->handle_property_change_fn = NULL;
 
 	service->sighandler_id = g_signal_connect_data(G_OBJECT(service->remote), "property-changed",
 		G_CALLBACK(property_changed_cb), service, NULL, 0);
@@ -516,7 +528,7 @@ void connman_service_free(gpointer data, gpointer user_data)
 
 	if(service->sighandler_id)
 		g_signal_handler_disconnect(G_OBJECT(service->remote), service->sighandler_id);
-	service->handle_state_change_fn = NULL;
+	service->handle_property_change_fn = NULL;
 
 	g_free(service);
 	service = NULL;
