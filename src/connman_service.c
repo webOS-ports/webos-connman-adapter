@@ -460,8 +460,6 @@ connman_service_t *connman_service_new(GVariant *variant)
 		return NULL;
 	}
 
-	service->path = service->name = service->state = NULL;
-	
 	GVariant *service_v = g_variant_get_child_value(variant, 0);
 	service->path = g_variant_dup_string(service_v, NULL);
 	
