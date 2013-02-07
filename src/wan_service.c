@@ -103,6 +103,33 @@ const char* service_to_wan_status(connman_service_t *service)
 }
 
 /**
+ * @brief Convert a bearer name from connman to only names defined in our API
+ * @param service Service object to take the current bearer from
+ * @return String with the bearer name according to API definition
+ */
+const char* service_bearer_to_wan_bearer(int bearer)
+{
+	switch (bearer) {
+	case CONNMAN_SERVICE_BEARER_GPRS:
+		return "gprs";
+	case CONNMAN_SERVICE_BEARER_EDGE:
+		return "edge";
+	case CONNMAN_SERVICE_BEARER_UMTS:
+		return "umts";
+	/* NOTE according to API definition we have to report only "hsdpa" as value for
+	 * all three variants */
+	case CONNMAN_SERVICE_BEARER_HSUPA:
+	case CONNMAN_SERVICE_BEARER_HSDPA:
+	case CONNMAN_SERVICE_BEARER_HSPA:
+		return "hsdpa";
+	case CONNMAN_SERVICE_BEARER_LTE:
+		return "lte";
+	}
+
+	return "none";
+}
+
+/**
  *  @brief Add details about specific provided service
  *
  *  @param service_obj JSON service object
@@ -141,6 +168,8 @@ static void create_connection_status_reply(jvalue_ref reply)
 	GSList *iter = NULL;
 	connman_service_t *connected_service;
 	gboolean dataaccess_usable = FALSE;
+	int max_bearer = 0;
+	int bearer;
 
 	if (NULL == reply)
 		return;
@@ -161,14 +190,18 @@ static void create_connection_status_reply(jvalue_ref reply)
 		add_connected_service_status(service_obj, connected_service);
 		jarray_append(connected_services_obj, service_obj);
 
+		bearer = connman_service_get_bearer(connected_service);
+		if (bearer > max_bearer)
+			max_bearer = bearer;
+
 		/* If at least one cellular service is online we mark dataaccess as usable */
 		dataaccess_usable |= (connman_service_get_state(connected_service->state) == CONNMAN_SERVICE_STATE_ONLINE);
 	}
 
 	jobject_put(reply, J_CSTR_TO_JVAL("dataaccess"), jstring_create(dataaccess_usable ? "usable" : "unusable"));
 
-	/* FIXME we need to determine somehow the network type of the service */
-	jobject_put(reply, J_CSTR_TO_JVAL("networktype"), jstring_create("umts"));
+	jobject_put(reply, J_CSTR_TO_JVAL("networktype"),
+				jstring_create(service_bearer_to_wan_bearer(max_bearer)));
 
 	jobject_put(reply, J_CSTR_TO_JVAL("connectedservices"), connected_services_obj);
 }

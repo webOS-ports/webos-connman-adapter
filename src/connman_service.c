@@ -96,6 +96,34 @@ int connman_service_get_state(const gchar *state)
 }
 
 /**
+ * Convert connman service bearer type to it's enum value
+ * (see header for API details)
+ */
+
+int connman_service_get_bearer(connman_service_t *service)
+{
+	if (!service->bearer)
+		return CONNMAN_SERVICE_BEARER_UNKNOWN;
+
+	if (g_str_equal(service->bearer, "gprs"))
+		return CONNMAN_SERVICE_BEARER_GPRS;
+	else if (g_str_equal(service->bearer, "edge"))
+		return CONNMAN_SERVICE_BEARER_EDGE;
+	else if (g_str_equal(service->bearer, "umts"))
+		return CONNMAN_SERVICE_BEARER_UMTS;
+	else if (g_str_equal(service->bearer, "hsupa"))
+		return CONNMAN_SERVICE_BEARER_HSUPA;
+	else if (g_str_equal(service->bearer, "hsdpa"))
+		return CONNMAN_SERVICE_BEARER_HSDPA;
+	else if (g_str_equal(service->bearer, "hspa"))
+		return CONNMAN_SERVICE_BEARER_HSPA;
+	else if (g_str_equal(service->bearer, "lte"))
+		return CONNMAN_SERVICE_BEARER_LTE;
+
+	return CONNMAN_SERVICE_BEARER_UNKNOWN;
+}
+
+/**
  * Asynchronous connect callback for a remote "connect" call
  */
 static void connect_callback(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
@@ -376,6 +404,11 @@ static void update_service_property(connman_service_t *service, const gchar *key
 		service->immutable = g_variant_get_boolean(val);
 	else if (g_str_equal(key, "Favorite"))
 		service->favorite = g_variant_get_boolean(val);
+	else if (g_str_equal(key, "Bearer")) {
+		if (service->bearer)
+			g_free(service->bearer);
+		service->bearer = g_variant_dup_string(val, NULL);
+	}
 
 	if (service->handle_property_change_fn)
 		service->handle_property_change_fn(service, key, val);
@@ -514,6 +547,7 @@ void connman_service_free(gpointer data, gpointer user_data)
 	g_free(service->ipinfo.ipv4.netmask);
 	g_free(service->ipinfo.ipv4.gateway);
 	g_strfreev(service->ipinfo.dns);
+	g_free(service->bearer);
 
 	if(service->sighandler_id)
 		g_signal_handler_disconnect(G_OBJECT(service->remote), service->sighandler_id);

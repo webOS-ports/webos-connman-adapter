@@ -66,6 +66,7 @@ typedef struct connman_service
 	gchar *path;
   	gchar *name;
   	gchar *state;
+	gchar *bearer;
 
   	guchar strength;
 	GStrv security;
@@ -105,6 +106,20 @@ enum {
 };
 
 /**
+ * Enum for service bearer types
+ */
+enum {
+	CONNMAN_SERVICE_BEARER_UNKNOWN = 0,
+	CONNMAN_SERVICE_BEARER_GPRS,
+	CONNMAN_SERVICE_BEARER_EDGE,
+	CONNMAN_SERVICE_BEARER_UMTS,
+	CONNMAN_SERVICE_BEARER_HSUPA,
+	CONNMAN_SERVICE_BEARER_HSDPA,
+	CONNMAN_SERVICE_BEARER_HSPA,
+	CONNMAN_SERVICE_BEARER_LTE
+};
+
+/**
  * Callback function letting callers handle remote "connect" call responses
  */
 typedef void (*connman_service_connect_cb)(gboolean success, gpointer user_data);
@@ -136,6 +151,15 @@ extern gchar *connman_service_get_webos_state(int connman_state);
  * @return Enum value
  */
 extern int connman_service_get_state(const gchar *state);
+
+/**
+ * Convert the connection bearer string to its enum value
+ *
+ * @param[IN]  bearer String from service's "Bearer" property
+ *
+ * @return Enum value
+ */
+extern int connman_service_get_bearer(connman_service_t *service);
 
 /**
  * Connect to a remote connman service
