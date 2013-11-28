@@ -33,6 +33,7 @@
  * @{
  */
 #define LUNA_METHOD_GETSTATUS		"getstatus"
+#define LUNA_METHOD_GETSTATUS2		"getStatus"
 #define LUNA_METHOD_SETIPV4		"setipv4"
 #define LUNA_METHOD_SETDNS		"setdns"
 #define LUNA_METHOD_SETSTATE		"setstate"

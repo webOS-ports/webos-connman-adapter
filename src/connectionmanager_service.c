@@ -932,10 +932,17 @@ static void technology_property_changed_callback(gpointer data, const gchar *pro
 
 static LSMethod connectionmanager_methods[] = {
     { LUNA_METHOD_GETSTATUS,            handle_get_status_command },
+    { LUNA_METHOD_GETSTATUS2,            handle_get_status_command },
     { LUNA_METHOD_SETIPV4,              handle_set_ipv4_command },
     { LUNA_METHOD_SETDNS,               handle_set_dns_command },
     { LUNA_METHOD_SETSTATE,             handle_set_state_command },
     { LUNA_METHOD_GETINFO,		handle_get_info_command },
+    { },
+};
+
+static LSMethod connectionmanager_public_methods[] = {
+    { LUNA_METHOD_GETSTATUS,            handle_get_status_command },
+    { LUNA_METHOD_GETSTATUS2,            handle_get_status_command },
     { },
 };
 
@@ -967,6 +974,12 @@ int initialize_connectionmanager_ls2_calls( GMainLoop *mainloop )
 	}
 
 	if (LSRegisterCategory(pLsHandle, NULL, connectionmanager_methods, NULL, NULL, &lserror) == false)
+	{
+		WCA_LOG_FATAL("LSRegisterCategory() returned error");
+		goto Exit;
+	}
+
+	if (LSRegisterCategory(pLsPublicHandle, NULL, connectionmanager_public_methods, NULL, NULL, &lserror) == false)
 	{
 		WCA_LOG_FATAL("LSRegisterCategory() returned error");
 		goto Exit;
