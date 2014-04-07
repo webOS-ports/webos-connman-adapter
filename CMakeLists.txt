@@ -104,6 +104,3 @@ webos_build_daemon()
 webos_build_system_bus_files()
 
 webos_config_build_doxygen(doc Doxyfile)
-
-# Install connman configuration file to set priorities between wired and wifi interfaces
-install(FILES files/conf/main.conf DESTINATION ${WEBOS_INSTALL_SYSCONFDIR}/connman)
