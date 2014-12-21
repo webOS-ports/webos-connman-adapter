@@ -186,6 +186,11 @@ void connectionmanager_send_status(void)
 			LSErrorPrint(&lserror, stderr);
 			LSErrorFree(&lserror);
 		}
+		if (!LSSubscriptionPost(pLsHandle, "/", "getStatus", payload, &lserror))
+		{
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+		}
 		jschema_release(&response_schema);
 	}
 	j_release(&reply);
