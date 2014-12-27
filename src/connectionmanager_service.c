@@ -130,9 +130,12 @@ static void send_connection_status(jvalue_ref *reply)
 	jvalue_ref disconnected_wired_status = jobject_create();
 	jvalue_ref connected_wifi_status = jobject_create();
 	jvalue_ref disconnected_wifi_status = jobject_create();
+	jvalue_ref connected_cellular_status = jobject_create();
+	jvalue_ref disconnected_cellular_status = jobject_create();
 
 	jobject_put(disconnected_wired_status, J_CSTR_TO_JVAL("state"), jstring_create("disconnected"));
 	jobject_put(disconnected_wifi_status, J_CSTR_TO_JVAL("state"), jstring_create("disconnected"));
+	jobject_put(disconnected_cellular_status, J_CSTR_TO_JVAL("state"), jstring_create("disconnected"));
 
 	/* Get the service which is connecting or already in connected state */
 	connman_service_t *connected_wired_service = connman_manager_get_connected_service(manager->wired_services);
@@ -160,6 +163,20 @@ static void send_connection_status(jvalue_ref *reply)
 		jobject_put(*reply, J_CSTR_TO_JVAL("wifi"), disconnected_wifi_status);
 		j_release(&connected_wifi_status);
 	}
+
+	connman_service_t *connected_cellular_service = connman_manager_get_connected_service(manager->cellular_services);
+	if (NULL != connected_cellular_service)
+	{
+		update_connection_status(connected_cellular_service, &connected_cellular_status);
+		jobject_put(*reply, J_CSTR_TO_JVAL("cellular"), connected_cellular_status);
+		j_release(&disconnected_cellular_status);
+	}
+	else
+	{
+		jobject_put(*reply, J_CSTR_TO_JVAL("cellular"), disconnected_cellular_status);
+		j_release(&connected_cellular_status);
+	}
+
 }
 
 
@@ -976,6 +993,13 @@ static LSMethod connectionmanager_public_methods[] = {
     { },
 };
 
+static gboolean check_cellular_status_cb(gpointer user_data)
+{
+	connman_technology_t *technology = connman_manager_find_cellular_technology(manager);
+	if (technology)
+		connman_technology_register_property_changed_cb(technology, technology_property_changed_callback);
+}
+
 /**
  *  @brief Initialize com.palm.connectionmanager service and all of its methods
  *  Also initialize a manager instance
@@ -1032,6 +1056,16 @@ int initialize_connectionmanager_ls2_calls( GMainLoop *mainloop )
 	if(technology)
 	{
 		connman_technology_register_property_changed_cb(technology, technology_property_changed_callback);
+	}
+
+	technology = connman_manager_find_cellular_technology(manager);
+	if (technology)
+	{
+		connman_technology_register_property_changed_cb(technology, technology_property_changed_callback);
+	}
+	else
+	{
+		g_timeout_add(500, check_cellular_status_cb, 0);
 	}
 
 	return 0;

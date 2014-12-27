@@ -31,6 +31,7 @@ webos_component(1 0 0)
 
 set(WIFI_IFACE_NAME "wlan0" CACHE STRING "WiFi interface name")
 set(WIRED_IFACE_NAME "eth0" CACHE STRING "Wired interface name")
+set(CELLULAR_IFACE_NAME "rmnet_usb0" CACHE STRING "Cellular interface name")
 
 find_program(GDBUS_CODEGEN_EXECUTABLE NAMES gdbus-codegen DOC "gdbus-codegen executable")
 if(NOT GDBUS_CODEGEN_EXECUTABLE)

@@ -86,6 +86,7 @@ enum {
 	CONNMAN_SERVICE_TYPE_UNKNOWN = 0,
 	CONNMAN_SERVICE_TYPE_ETHERNET,
 	CONNMAN_SERVICE_TYPE_WIFI,
+	CONNMAN_SERVICE_TYPE_CELLULAR,
 	CONNMAN_SERVICE_TYPE_MAX
 };
 
@@ -125,6 +126,8 @@ extern gboolean connman_service_type_wifi(connman_service_t *service);
  * @return TRUE if the service has "ethernet" type
  */
 extern gboolean connman_service_type_ethernet(connman_service_t *service);
+
+extern gboolean connman_service_type_cellular(connman_service_t *service);
 
 /**
  * Stringify the service connection status to corresponding webos state

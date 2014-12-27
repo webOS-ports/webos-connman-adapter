@@ -106,6 +106,11 @@ static connman_service_t *find_service_from_props(connman_manager_t *manager,
 		return service;
 
 	service = find_service_from_path(manager->wired_services, path);
+	if (NULL != service)
+		return service;
+
+	service = find_service_from_path(manager->cellular_services, path);
+
 	return service;
 }
 
@@ -179,12 +184,22 @@ static gboolean service_on_configured_iface(GVariant	*service_v)
 					GVariant *ifaceva = g_variant_get_variant(ifacev);
 					const gchar *iface = g_variant_get_string(ifaceva, NULL);
 					if(g_str_equal(iface,CONNMAN_WIFI_INTERFACE_NAME) ||
-						g_str_equal(iface,CONNMAN_WIRED_INTERFACE_NAME))
+						g_str_equal(iface,CONNMAN_WIRED_INTERFACE_NAME) ||
+						g_str_equal(iface,CONNMAN_CELLULAR_INTERFACE_NAME))
 						return TRUE;
 					else
 						return FALSE;
 				}
 		  	}
+		}
+		else if (g_str_equal(key, "Type"))
+		{
+			GVariant *v = g_variant_get_child_value(property, 1);
+			GVariant *va = g_variant_get_variant(v);
+			const gchar *value = g_variant_get_string(va, NULL);
+
+			if (g_strcmp0(value, "cellular") == 0)
+				return TRUE;
 		}
 	}
 	return FALSE;
@@ -221,6 +236,10 @@ static void add_service_to_list(connman_manager_t *manager, connman_service_t *s
 	else if(connman_service_type_ethernet(service))
 	{
 		manager->wired_services = g_slist_append(manager->wired_services, service);
+	}
+	else if (connman_service_type_cellular(service))
+	{
+		manager->cellular_services = g_slist_append(manager->cellular_services, service);
 	}
 }
 
@@ -333,12 +352,13 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager, 
 	if(NULL == manager || NULL == services_removed)
 		return FALSE;
 
-	gboolean wifi_services_removed = FALSE, wired_services_removed = FALSE;
+	gboolean wifi_services_removed = FALSE, wired_services_removed = FALSE, cellular_services_removed = FALSE;
 
 	wifi_services_removed = remove_services_from_list(&manager->wifi_services, services_removed);
 	wired_services_removed = remove_services_from_list(&manager->wired_services, services_removed);
+	cellular_services_removed = remove_services_from_list(&manager->cellular_services, services_removed);
 
-	return (wifi_services_removed | wired_services_removed);
+	return (wifi_services_removed | wired_services_removed || cellular_services_removed);
 }
 
 /**
@@ -359,6 +379,10 @@ static void connman_manager_free_services(connman_manager_t *manager)
 	g_slist_foreach(manager->wired_services, (GFunc) connman_service_free, NULL);
 	g_slist_free(manager->wired_services);
 	manager->wired_services = NULL;
+
+	g_slist_foreach(manager->cellular_services, (GFunc) connman_service_free, NULL);
+	g_slist_free(manager->cellular_services);
+	manager->cellular_services = NULL;
 }
 
 /**
@@ -556,6 +580,26 @@ connman_technology_t *connman_manager_find_ethernet_technology (connman_manager_
 		connman_technology_t *tech = (struct connman_technology *)(iter->data);
 
 		if (g_str_equal("ethernet", tech->type))
+		{
+			return tech;
+		}
+	}
+
+	return NULL;
+}
+
+connman_technology_t *connman_manager_find_cellular_technology (connman_manager_t *manager)
+{
+	if(NULL == manager)
+		return NULL;
+
+	GSList *iter;
+
+	for (iter = manager->technologies; NULL != iter; iter = iter->next)
+	{
+		connman_technology_t *tech = (struct connman_technology *)(iter->data);
+
+		if (g_str_equal("cellular", tech->type))
 		{
 			return tech;
 		}
@@ -846,6 +890,7 @@ connman_manager_t *connman_manager_new (void)
 
 	WCA_LOG_INFO("%d wifi services", g_slist_length(manager->wifi_services));
 	WCA_LOG_INFO("%d wired services", g_slist_length(manager->wired_services));
+	WCA_LOG_INFO("%d cellular services", g_slist_length(manager->cellular_services));
 	WCA_LOG_INFO("%d technologies", g_slist_length(manager->technologies));
 
 	return manager;

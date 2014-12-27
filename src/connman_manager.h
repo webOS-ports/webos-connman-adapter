@@ -51,6 +51,7 @@ typedef struct connman_manager
 	gchar   *state;
 	GSList	*wifi_services;
 	GSList	*wired_services;
+	GSList	*cellular_services;
 	GSList	*technologies;
 	connman_property_changed_cb	handle_property_change_fn;
 	connman_services_changed_cb	handle_services_change_fn;
@@ -92,6 +93,8 @@ extern connman_technology_t *connman_manager_find_wifi_technology(connman_manage
  * @return Technology with type "wired"
  */
 extern connman_technology_t *connman_manager_find_ethernet_technology(connman_manager_t *manager);
+
+extern connman_technology_t *connman_manager_find_cellular_technology(connman_manager_t *manager);
 
 /**
  * Go through the manager's given services list and get the one which is in "ready" or 

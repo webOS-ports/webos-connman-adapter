@@ -52,6 +52,13 @@ gboolean connman_service_type_ethernet(connman_service_t *service)
 	return service->type == CONNMAN_SERVICE_TYPE_ETHERNET;
 }
 
+gboolean connman_service_type_cellular(connman_service_t *service)
+{
+	if(NULL == service)
+		return FALSE;
+	return service->type == CONNMAN_SERVICE_TYPE_CELLULAR;
+}
+
 /**
  * Map the service connection status to corresponding webos state 
  * (see header for API details)
@@ -458,6 +465,9 @@ void connman_service_update_properties(connman_service_t *service, GVariant *pro
 
 			if (g_str_equal(v, "ethernet"))
 				service->type = CONNMAN_SERVICE_TYPE_ETHERNET;
+
+			if (g_str_equal(v, "cellular"))
+				service->type = CONNMAN_SERVICE_TYPE_CELLULAR;
 		}
 		else if (g_str_equal(key, "State"))
 		{
