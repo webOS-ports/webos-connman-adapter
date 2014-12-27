@@ -454,6 +454,8 @@ static void append_connection_status(jvalue_ref *reply, bool subscribed,
 	jvalue_ref disconnected_wifi_status = jobject_create();
 	jvalue_ref connected_p2p_status = jobject_create();
 	jvalue_ref disconnected_p2p_status = jobject_create();
+	jvalue_ref connected_cellular_status = jobject_create();
+	jvalue_ref disconnected_cellular_status = jobject_create();
 
 	jobject_put(disconnected_wired_status, J_CSTR_TO_JVAL("state"),
 	            jstring_create("disconnected"));
@@ -463,6 +465,8 @@ static void append_connection_status(jvalue_ref *reply, bool subscribed,
 	            jboolean_create(is_wifi_tethering()));
 	jobject_put(disconnected_p2p_status, J_CSTR_TO_JVAL("state"),
 	            jstring_create("disconnected"));
+	jobject_put(disconnected_cellular_status, J_CSTR_TO_JVAL("state"), 
+                jstring_create("disconnected"));
 
 	/* get the service which is currently connecting or already in connected */
 	connman_service_t *connected_wired_service =
@@ -507,6 +511,19 @@ static void append_connection_status(jvalue_ref *reply, bool subscribed,
 	{
 		jobject_put(*reply, J_CSTR_TO_JVAL("wifi"), disconnected_wifi_status);
 		j_release(&connected_wifi_status);
+	}
+
+	connman_service_t *connected_cellular_service = connman_manager_get_connected_service(manager->cellular_services);
+	if (NULL != connected_cellular_service)
+	{
+		update_connection_status(connected_cellular_service, &connected_cellular_status);
+		jobject_put(*reply, J_CSTR_TO_JVAL("cellular"), connected_cellular_status);
+		j_release(&disconnected_cellular_status);
+	}
+	else
+	{
+		jobject_put(*reply, J_CSTR_TO_JVAL("cellular"), disconnected_cellular_status);
+		j_release(&connected_cellular_status);
 	}
 
 	connman_service_t *connected_p2p_service = NULL;

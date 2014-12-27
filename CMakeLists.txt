@@ -29,6 +29,8 @@ webos_component(1 1 0)
 
 set(WIFI_IFACE_NAME "wlan0" CACHE STRING "WiFi interface name")
 set(WIRED_IFACE_NAME "eth0" CACHE STRING "Wired interface name")
+set(CELLULAR_IFACE_NAME "rmnet_usb0" CACHE STRING "Cellular interface name")
+
 set(CONNMAN_CONFIG_DIR "/var/lib/connman" CACHE STRING "Default connman config folder")
 
 find_program(GDBUS_CODEGEN_EXECUTABLE NAMES gdbus-codegen DOC "gdbus-codegen executable")

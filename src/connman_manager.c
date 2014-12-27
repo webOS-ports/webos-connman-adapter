@@ -215,7 +215,8 @@ static gboolean service_on_configured_iface(GVariant *service_v)
 					g_variant_unref(ifaceva);
 
 					if (!g_strcmp0(iface, CONNMAN_WIFI_INTERFACE_NAME) ||
-					        !g_strcmp0(iface, CONNMAN_WIRED_INTERFACE_NAME))
+					        !g_strcmp0(iface, CONNMAN_WIRED_INTERFACE_NAME) ||
+					        !g_strcmp0(iface, CONNMAN_CELLULAR_INTERFACE_NAME))
 					{
 						return TRUE;
 					}
@@ -1958,6 +1959,8 @@ connman_manager_t *connman_manager_new(void)
 	WCALOG_DEBUG("%d bluetooth services, %d technologies",
 	             g_slist_length(manager->bluetooth_services),
 	             g_slist_length(manager->technologies));
+
+	WCALOG_DEBUG("%d technologies", g_slist_length(manager->technologies));
 
 	return manager;
 }
