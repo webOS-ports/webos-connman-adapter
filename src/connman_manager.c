@@ -490,8 +490,8 @@ gboolean connman_manager_is_manager_available (connman_manager_t *manager)
 	  		GVariant *v = g_variant_get_child_value(property, 1);
 			GVariant *va = g_variant_get_variant(v);
 			gboolean offline = g_variant_get_boolean(va);
-		
-          		return !offline;
+
+			return !offline;
 		}
 	}
 
@@ -672,6 +672,27 @@ services_changed_cb(ConnmanInterfaceManager *proxy, GVariant *services_added,
 		if(NULL != manager->handle_services_change_fn)
 			(manager->handle_services_change_fn)(manager);
 	}
+}
+
+gboolean connman_manager_set_offline(connman_manager_t *manager, gboolean state)
+{
+	if (NULL == manager)
+		return FALSE;
+
+	GError *error = NULL;
+
+	connman_interface_manager_call_set_property_sync(manager->remote,
+						  "OfflineMode",
+						  g_variant_new_variant(g_variant_new_boolean(state)),
+						  NULL, &error);
+	if (error)
+	{
+		WCA_LOG_CRITICAL("%s", error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 /**

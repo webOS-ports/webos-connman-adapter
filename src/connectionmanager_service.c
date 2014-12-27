@@ -121,9 +121,10 @@ static void send_connection_status(jvalue_ref *reply)
 {
         if(NULL == reply)
                 return;
-	jobject_put(*reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+
 	gboolean online = connman_manager_is_manager_online(manager);
 	jobject_put(*reply, J_CSTR_TO_JVAL("isInternetConnectionAvailable"), jboolean_create(online));
+	jobject_put(*reply, J_CSTR_TO_JVAL("offlineMode"), jstring_create(!connman_manager_is_manager_available(manager) ? "enabled" : "disabled"));
 
 	jvalue_ref connected_wired_status = jobject_create();
 	jvalue_ref disconnected_wired_status = jobject_create();
@@ -172,7 +173,10 @@ void connectionmanager_send_status(void)
 	jvalue_ref reply = jobject_create();
 	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
-	send_connection_status(&reply);
+	if (manager)
+		send_connection_status(&reply);
+
+	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
 	jschema_ref response_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
 	if(response_schema)
@@ -286,13 +290,12 @@ static bool handle_get_status_command(LSHandle* sh, LSMessage *message, void* co
 			LSErrorFree(&lserror);
 		}
 		jobject_put(reply, J_CSTR_TO_JVAL("subscribed"), jboolean_create(subscribed));
-		if(!connman_manager_is_manager_available(manager))
-			goto response;
 	}
-	if(!connman_status_check(manager, sh, message))
-		goto cleanup;
 
-	send_connection_status(&reply);
+	if (manager)
+		send_connection_status(&reply);
+
+	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
 response:
 	{
@@ -626,6 +629,11 @@ static gboolean set_wifi_state(bool state)
 	return connman_technology_set_powered(connman_manager_find_wifi_technology(manager),state);
 }
 
+static gboolean set_offline_mode(bool state)
+{
+	return connman_manager_set_offline(manager, state);
+}
+
 /**
  *  @brief Returns true if ethernet technology is powered on
  *
@@ -688,9 +696,6 @@ None
 
 static bool handle_set_state_command(LSHandle *sh, LSMessage *message, void* context)
 {
-	if(!connman_status_check(manager, sh, message))
-		return true;
-
 	jvalue_ref parsedObj = {0};
 	jschema_ref input_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
 	if(!input_schema)
@@ -707,8 +712,8 @@ static bool handle_set_state_command(LSHandle *sh, LSMessage *message, void* con
 		return true;
 	}
 
-	jvalue_ref wifiObj = {0}, wiredObj = {0};
-	gboolean enable_wifi = FALSE, enable_wired = FALSE;
+	jvalue_ref wifiObj = {0}, wiredObj = {0}, offlineObj = {0};
+	gboolean enable_wifi = FALSE, enable_wired = FALSE, enable_offline = FALSE;
 	gboolean invalidArg = TRUE;
 
 	if(jobject_get_exists(parsedObj, J_CSTR_TO_BUF("wifi"), &wifiObj))
@@ -769,6 +774,26 @@ static bool handle_set_state_command(LSHandle *sh, LSMessage *message, void* con
 		}
 		invalidArg = FALSE;
 	}
+
+	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("offlineMode"), &offlineObj))
+	{
+		if (jstring_equal2(offlineObj, J_CSTR_TO_BUF("enabled")))
+			enable_offline = TRUE;
+		else if (jstring_equal2(offlineObj, J_CSTR_TO_BUF("disabled")))
+			enable_offline = FALSE;
+		else
+			goto invalid_params;
+
+		gboolean offline = connman_manager_is_manager_available(manager);
+
+		if ((enable_offline && !offline) || (!enable_offline && offline))
+			WCA_LOG_DEBUG("Offline mode is already %s", enable_offline ? "enabled" : "disabled");
+		else
+			set_offline_mode(enable_offline);
+
+		invalidArg = FALSE;
+	}
+
 	if(invalidArg == TRUE)
 	{
 		goto invalid_params;

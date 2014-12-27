@@ -139,6 +139,8 @@ extern gboolean connman_manager_register_agent(connman_manager_t *manager, const
  **/
 extern gboolean connman_manager_unregister_agent(connman_manager_t *manager, const gchar *path);
 
+extern gboolean connman_manager_set_offline(connman_manager_t *manager, gboolean state);
+
 /**
  * Initialize a new manager instance and update its services and technologies list
  */
