@@ -104,9 +104,14 @@ static void update_connection_status(connman_service_t *connected_service, jvalu
 			if(NULL != connected_service->name)
 				jobject_put(*status, J_CSTR_TO_JVAL("ssid"), jstring_create(connected_service->name));
 			jobject_put(*status, J_CSTR_TO_JVAL("isWakeOnWifiEnabled"), jboolean_create(false));
+			jobject_put(*status, J_CSTR_TO_JVAL("signalLevel"), jnumber_create_i32(connected_service->strength));
 		}
 		const char *s = (connman_state == CONNMAN_SERVICE_STATE_ONLINE)?"yes":"no";
 		jobject_put(*status, J_CSTR_TO_JVAL("onInternet"), jstring_create(s));
+
+		/* unless we have something to determine the confidence level we always
+		 * provide execellent as proper default. */
+		jobject_put(*status, J_CSTR_TO_JVAL("networkConfidenceLevel"), jstring_create("excellent"));
 	}
 	else
 		jobject_put(*status, J_CSTR_TO_JVAL("state"), jstring_create("disconnected"));
