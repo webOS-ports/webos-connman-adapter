@@ -637,7 +637,8 @@ static void connect_wifi_with_ssid(const char *ssid, jvalue_ref req_object, luna
 			jstring_free_buffer(passkey_buf);
 		}
 		else if (jobject_get_exists(security_obj, J_CSTR_TO_BUF("enterpriseSecurity"), &enterprise_security_obj) &&
-			jobject_get_exists(enterprise_security_obj, J_CSTR_TO_BUF("identityEAP"), &identity_obj, J_CSTR_TO_BUF("passKey"), &passkey_obj))
+			 jobject_get_exists(enterprise_security_obj, J_CSTR_TO_BUF("identityEAP"), &identity_obj) &&
+			 jobject_get_exists(enterprise_security_obj, J_CSTR_TO_BUF("passKey"), &passkey_obj))
 		{
 			identity_buf = jstring_get(identity_obj);
 			settings->identity = strdup(identity_buf.m_str);			
