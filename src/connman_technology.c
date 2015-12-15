@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-*      Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+*      Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -25,13 +25,10 @@
  */
 
 #include "connman_technology.h"
+#include "logging.h"
 
 /**
- * @brief  Power on/off the given technology  
- *
- * @param  technology
- * @param  state
- *
+ * Power on/off the given technology (see header for API details)
  */
 
 gboolean connman_technology_set_powered(connman_technology_t *technology, gboolean state)
@@ -47,7 +44,7 @@ gboolean connman_technology_set_powered(connman_technology_t *technology, gboole
 						  NULL, &error);
 	if (error)
 	{
-		g_message("%s", error->message);
+		WCA_LOG_CRITICAL("%s", error->message);
 		g_error_free(error);
 		return FALSE;
 	}
@@ -57,10 +54,7 @@ gboolean connman_technology_set_powered(connman_technology_t *technology, gboole
 }
 
 /**
- * @brief  Scan the network for available services
- *
- * @param  technology
- *
+ * Scan the network for available services (see header for API details)
  */
 
 gboolean connman_technology_scan_network(connman_technology_t *technology)
@@ -73,7 +67,7 @@ gboolean connman_technology_scan_network(connman_technology_t *technology)
 	connman_interface_technology_call_scan_sync(technology->remote, NULL, &error);
 	if (error)
 	{
-		g_message("%s", error->message);
+		WCA_LOG_CRITICAL("%s", error->message);
 		g_error_free(error);
 		return FALSE;
 	}
@@ -81,23 +75,26 @@ gboolean connman_technology_scan_network(connman_technology_t *technology)
 }
 
 /**
- * @brief  Callback for technology's "property_changed" signal
- *
- * @param  proxy
- * @param  property
- * @param  v
- * @param  technology
- *
+ * Callback for technology's "property_changed" signal
  */
 
 static void
 property_changed_cb(ConnmanInterfaceTechnology *proxy,const gchar * property, GVariant *v,
               connman_technology_t      *technology)
 {
+	GVariant *val = g_variant_get_variant(v);
+	if (g_str_equal(property, "Powered"))
+		technology->powered = g_variant_get_boolean(val);
+
 	if(NULL != technology->handle_property_change_fn)
                 (technology->handle_property_change_fn)((gpointer)technology, property, v);
 }
 
+
+/**
+ * Register for technology's "properties_changed" signal, calling the provided function whenever the callback function
+ * for the signal is called (see header for API details)
+ */
 
 void connman_technology_register_property_changed_cb(connman_technology_t *technology, connman_property_changed_cb func)
 {
@@ -109,10 +106,7 @@ void connman_technology_register_property_changed_cb(connman_technology_t *techn
 
 
 /**
- * @brief  Create a new technology instance and set its properties
- *
- * @param  variant
- *
+ * Create a new technology instance and set its properties (see header fpr API details)
  */
 
 connman_technology_t *connman_technology_new(GVariant *variant)
@@ -123,7 +117,7 @@ connman_technology_t *connman_technology_new(GVariant *variant)
 	connman_technology_t *technology = g_new0(connman_technology_t, 1);
 	if(technology == NULL)
 	{
-		g_error("Out of memory !!!");
+		WCA_LOG_FATAL("Out of memory !!!");
 		return NULL;
 	}
 
@@ -142,12 +136,11 @@ connman_technology_t *connman_technology_new(GVariant *variant)
 								&error);
 	if (error)
 	{
-		g_error("%s", error->message);
+		WCA_LOG_FATAL("%s", error->message);
 		g_error_free(error);
+		g_free(technology);
 		return NULL;
 	}
-
-	technology->handle_property_change_fn = NULL;
 
 	technology->sighandler_id = g_signal_connect_data(G_OBJECT(technology->remote), "property-changed",
                    G_CALLBACK(property_changed_cb), technology, NULL, 0);
@@ -177,11 +170,7 @@ connman_technology_t *connman_technology_new(GVariant *variant)
 }
 
 /**
- * @brief  Free the technology instance
- *
- * @param  data
- * @param  user_data
- *
+ * Free the technology instance ( see header for API details)
  */
 
 void connman_technology_free(gpointer data, gpointer user_data)

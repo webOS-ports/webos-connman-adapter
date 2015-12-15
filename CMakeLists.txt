@@ -1,6 +1,6 @@
 # @@@LICENSE
 #
-# Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+# Copyright (c) 2012-2013 LG Electronics, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,11 +30,12 @@ webos_modules_init(1 0 0 QUALIFIER RC4)
 webos_component(1 0 0)
 
 set(WIFI_IFACE_NAME "wlan0" CACHE STRING "WiFi interface name")
+set(WIRED_IFACE_NAME "eth0" CACHE STRING "Wired interface name")
 
 find_program(GDBUS_CODEGEN_EXECUTABLE NAMES gdbus-codegen DOC "gdbus-codegen executable")
 if(NOT GDBUS_CODEGEN_EXECUTABLE)
 	message(FATAL_ERROR "Executable gdbus-codegen not found")
-endif(GDBUS_CODEGEN_EXECUTABLE)
+endif()
 
 include(FindPkgConfig)
 
@@ -62,6 +63,10 @@ pkg_check_modules(LUNAPREFS REQUIRED luna-prefs)
 include_directories(${LUNAPREFS_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${LUNAPREFS_CFLAGS_OTHER})
 
+pkg_check_modules(PMLOG REQUIRED PmLogLib)
+include_directories(${PMLOG_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${PMLOG_CFLAGS_OTHER})
+
 webos_add_compiler_flags(ALL -Wall -g)
 
 webos_add_linker_options(ALL --no-undefined)
@@ -88,9 +93,10 @@ target_link_libraries(webos-connman-adapter
                         ${GLIB2_LDFLAGS}
                         ${LUNASERVICE2_LDFLAGS}
                         ${GIO-UNIX_LDFLAGS}
-			${PBNJSON_C_LDFLAGS}
-			${OPENSSL_LDFLAGS}
-			${LUNAPREFS_LDFLAGS}
+                        ${PBNJSON_C_LDFLAGS}
+                        ${OPENSSL_LDFLAGS}
+                        ${LUNAPREFS_LDFLAGS}
+                        ${PMLOG_LDFLAGS}
                         rt
                         pthread)
 
@@ -98,3 +104,6 @@ webos_build_daemon()
 webos_build_system_bus_files()
 
 webos_config_build_doxygen(doc Doxyfile)
+
+# Install connman configuration file to set priorities between wired and wifi interfaces
+install(FILES files/conf/main.conf DESTINATION ${WEBOS_INSTALL_SYSCONFDIR}/connman)

@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-* Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+* Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -32,9 +32,20 @@
 #include <stdlib.h>
 #include <luna-service2/lunaservice.h>
 
+#include "logging.h"
+#include "wifi_service.h"
+#include "connectionmanager_service.h"
+
 static GMainLoop *mainloop = NULL;
 
 int initialize_wifi_ls2_calls();
+
+/**
+ * Our PmLogLib logging context
+ */
+PmLogContext gLogContext;
+
+static const char* const kLogContextName = "webos-connman-adapter";
 
 void
 term_handler(int signal)
@@ -51,11 +62,21 @@ main(int argc, char **argv)
 
     mainloop = g_main_loop_new(NULL, FALSE);
 
+    (void)PmLogGetContext(kLogContextName, &gLogContext);
+
+    WCA_LOG_INFO("Starting webos-connman-adapter");
+
     if(initialize_wifi_ls2_calls(mainloop) < 0)
     {
-	g_error("Error in initializing com.palm.wifi service");
-	return -1; 
+        WCA_LOG_FATAL("Error in initializing com.palm.wifi service");
+        return -1;
     }  
+
+    if(initialize_connectionmanager_ls2_calls(mainloop) < 0)
+    {
+        WCA_LOG_FATAL("Error in initializing com.palm.connectionmanager service");
+        return -1;
+    }
 
     g_main_loop_run(mainloop);
 

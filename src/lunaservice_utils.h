@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-*      Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+*      Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -29,6 +29,13 @@
 #define __LUNASERVICE_UTILS_H__
 
 #include <luna-service2/lunaservice.h>
+
+typedef struct luna_service_request {
+	LSHandle *handle;
+	LSMessage *message;
+} luna_service_request_t;
+
+extern luna_service_request_t* luna_service_request_new(LSHandle *handle, LSMessage *message);
 
 extern void LSMessageReplyErrorUnknown(LSHandle *sh, LSMessage *message);
 extern void LSMessageReplyErrorInvalidParams(LSHandle *sh, LSMessage *message);

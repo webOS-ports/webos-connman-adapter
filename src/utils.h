@@ -1,6 +1,7 @@
 /* @@@LICENSE
 *
 *      Copyright (c) 2012-2013 LG Electronics, Inc.
+*      Copyright (c) 2012 Simon Busch <morphis@gravedo.de>
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -16,20 +17,25 @@
 *
 * LICENSE@@@ */
 
+#ifndef UTILS_H_
+#define UTILS_H_
 
-#ifndef _CONNMAN_COMMON_H_
-#define _CONNMAN_COMMON_H_
+struct cb_data {
+	void *cb;
+	void *data;
+	void *user;
+};
 
-#include <gio/gio.h>
-#include <glib-object.h>
+static inline struct cb_data *cb_data_new(void *cb, void *data)
+{
+	struct cb_data *ret;
 
-#include "connman-interface.h"
+	ret = g_new0(struct cb_data, 1);
+	ret->cb = cb;
+	ret->data = data;
+	ret->user = NULL;
 
-#define CONNMAN_WIFI_INTERFACE_NAME	"@WIFI_IFACE_NAME@"
-#define CONNMAN_WIRED_INTERFACE_NAME	"@WIRED_IFACE_NAME@"
+	return ret;
+}
 
-typedef void (*connman_property_changed_cb)(gpointer , const gchar *, GVariant *);
-typedef void (*connman_state_changed_cb)(gpointer , const gchar *);
-
-#endif /* _CONNMAN_COMMON_H_ */
-
+#endif

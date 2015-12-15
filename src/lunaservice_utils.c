@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-*      Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+*      Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -25,6 +25,17 @@
  */
 
 #include "lunaservice_utils.h"
+
+luna_service_request_t* luna_service_request_new(LSHandle *handle, LSMessage *message)
+{
+	luna_service_request_t *req = NULL;
+
+	req = g_new0(luna_service_request_t, 1);
+	req->handle = handle;
+	req->message = message;
+
+	return req;
+}
 
 void
 LSMessageReplyErrorUnknown(LSHandle *sh, LSMessage *message)

@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-*      Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+*      Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@
 #include "wifi_setting.h"
 #include "wifi_service.h"
 #include "wifi_profile.h"
+#include "logging.h"
 
 /**
  * WiFi setting keys used to identify settings stored in luna-prefs database.
@@ -63,7 +64,7 @@ static char* wifi_setting_encrypt(const char *input_str, const char *key)
 
 	if (pBfKey == NULL)
 	{
-		g_error("Out of memory!");
+		WCA_LOG_FATAL("Out of memory!");
 		goto Exit;
 	}
 
@@ -79,7 +80,7 @@ static char* wifi_setting_encrypt(const char *input_str, const char *key)
 	output_str = g_new0(char, len + 1);
 	if (!output_str)
 	{
-		g_error("Out of memory!");
+		WCA_LOG_FATAL("Out of memory!");
 		goto Exit;
 	}
 
@@ -120,7 +121,7 @@ static char* wifi_setting_decrypt(const char *input_str, const char *key)
 
 	if (pBfKey == NULL)
 	{
-		g_error("Out of memory!");
+		WCA_LOG_FATAL("Out of memory!");
 		goto Exit;
 	}
 
@@ -138,7 +139,7 @@ static char* wifi_setting_decrypt(const char *input_str, const char *key)
 		output_str = g_new0(char, len + 1);
 		if (!output_str)
 		{
-			g_error("Out of memory!");
+			WCA_LOG_FATAL("Out of memory!");
 			goto Exit;
 		}
 
@@ -162,12 +163,13 @@ Exit:
 static gboolean populate_wifi_profile(jvalue_ref profileObj)
 {
 	gboolean ret = FALSE;
-	jvalue_ref wifiProfileObj, ssidObj;
+	jvalue_ref wifiProfileObj, ssidObj, securityListObj, hiddenObj;
 
 	if(jobject_get_exists(profileObj, J_CSTR_TO_BUF("wifiProfile"), &wifiProfileObj))
 	{
 		raw_buffer enc_profile_buf = jstring_get(wifiProfileObj);
 		gchar *enc_profile = g_strdup(enc_profile_buf.m_str);
+		jstring_free_buffer(enc_profile_buf);
 		gchar *dec_profile = wifi_setting_decrypt(enc_profile, WIFI_LUNA_PREFS_ID);
 
 		jvalue_ref parsedObj = {0};
@@ -185,17 +187,43 @@ static gboolean populate_wifi_profile(jvalue_ref profileObj)
 			goto Exit;
 		}
 
+		gchar *ssid = NULL;
+		GStrv security = NULL;
 		if(jobject_get_exists(parsedObj,J_CSTR_TO_BUF("ssid"), &ssidObj))
 		{
 			raw_buffer ssid_buf = jstring_get(ssidObj);
-			gchar *ssid = g_strdup(ssid_buf.m_str);
-			if(NULL == get_profile_by_ssid(ssid))
-				create_new_profile(ssid);
-			g_free(ssid);
+			ssid = g_strdup(ssid_buf.m_str);
+			jstring_free_buffer(ssid_buf);
 			ret = TRUE;
 		}
 		else
-			g_message("ssid object not found");
+			WCA_LOG_DEBUG("ssid object not found");
+
+		if(NULL == get_profile_by_ssid(ssid))
+		{
+			bool hidden = false;
+			if(jobject_get_exists(parsedObj,J_CSTR_TO_BUF("security"), &securityListObj))
+			{
+				ssize_t i, num_elems = jarray_size(securityListObj);
+				security = (GStrv) g_new0(GStrv, 1);
+				for(i = 0; i < num_elems; i++)
+				{
+					jvalue_ref securityObj = jarray_get(securityListObj, i);
+					raw_buffer security_buf = jstring_get(securityObj);
+					security[i] = g_strdup(security_buf.m_str);
+					jstring_free_buffer(security_buf);
+				}
+			}
+			if(jobject_get_exists(parsedObj,J_CSTR_TO_BUF("wasCreatedWithJoinOther"), &hiddenObj))
+			{
+				jboolean_get(hiddenObj, &hidden);
+			}
+			// Converting bool to gboolean as create_new_profile expects gboolean
+			create_new_profile(ssid, security, hidden?TRUE:FALSE);
+			g_strfreev(security);
+		}
+
+		g_free(ssid);
 Exit:
 		j_release(&parsedObj);
 		g_free(dec_profile);
@@ -223,7 +251,7 @@ gboolean load_wifi_setting(wifi_setting_type_t setting, void *data)
 	lpErr = LPAppGetHandle(WIFI_LUNA_PREFS_ID, &handle);
         if (lpErr)
         {
-		g_message("Error in getting LPAppHandle for %s",WIFI_LUNA_PREFS_ID);
+		WCA_LOG_ERROR("Error in getting LPAppHandle for %s",WIFI_LUNA_PREFS_ID);
 		goto Exit;
 	}
 
@@ -232,7 +260,7 @@ gboolean load_wifi_setting(wifi_setting_type_t setting, void *data)
 
 	if (lpErr)
         {
-		g_message("Error in executing LPAppCopyValue for %s",SettingKey[setting]);
+		WCA_LOG_ERROR("Error in executing LPAppCopyValue for %s",SettingKey[setting]);
 		goto Exit;
 	}
 
@@ -241,7 +269,6 @@ gboolean load_wifi_setting(wifi_setting_type_t setting, void *data)
 	{
 		case WIFI_PROFILELIST_SETTING:
 		{
-			gboolean ret = FALSE;
 			jvalue_ref parsedObj = {0};
 			jschema_ref input_schema = jschema_parse (j_cstr_to_buffer("{}"), DOMOPT_NOOPT, NULL);
 			if(!input_schema)
@@ -289,11 +316,24 @@ static void add_wifi_profile(jvalue_ref *profile_j, wifi_profile_t *profile)
 {
         jobject_put(*profile_j, J_CSTR_TO_JVAL("ssid"), jstring_create(profile->ssid));
         jobject_put(*profile_j, J_CSTR_TO_JVAL("profileId"), jnumber_create_i32(profile->profile_id));
+	if(profile->hidden)
+		jobject_put(*profile_j, J_CSTR_TO_JVAL("wasCreatedWithJoinOther"), jboolean_create(profile->hidden));
+
+	if(profile->security != NULL)
+	{
+		jvalue_ref security_list = jarray_create(NULL);
+		gsize i;
+		for (i = 0; i < g_strv_length(profile->security); i++)
+		{
+			jarray_append(security_list, jstring_create(profile->security[i]));
+		}
+		jobject_put(*profile_j, J_CSTR_TO_JVAL("security"), security_list);
+	}
 }
 
 static gchar *add_wifi_profile_list(void)
 {
-        if(profile_list_is_empty() == TRUE)
+        if(profile_list_is_empty())
                 return NULL;
 
 	gchar *profile_list_str = NULL;
@@ -309,7 +349,7 @@ static gchar *add_wifi_profile_list(void)
 			jvalue_ref profileinfo_j = jobject_create();
 			jvalue_ref profile_j = jobject_create();
 			add_wifi_profile(&profile_j, profile);
-			gchar *profile_str = jvalue_tostring(profile_j, response_schema);
+			const gchar *profile_str = jvalue_tostring(profile_j, response_schema);
 			gchar *enc_profile_str = wifi_setting_encrypt(profile_str, WIFI_LUNA_PREFS_ID);
 			jobject_put(profileinfo_j, J_CSTR_TO_JVAL("wifiProfile"), jstring_create(enc_profile_str));
 			jarray_append(profilelist_arr_j, profileinfo_j);
@@ -339,10 +379,9 @@ gboolean store_wifi_setting(wifi_setting_type_t setting, void *data)
 	gboolean ret = FALSE;
 
 	lpErr = LPAppGetHandle(WIFI_LUNA_PREFS_ID, &handle);
-	g_message("Getting handle for %s ",WIFI_LUNA_PREFS_ID);
         if (lpErr)
         {
-		g_message("Error in getting LPAppHandle for %s",WIFI_LUNA_PREFS_ID);
+		WCA_LOG_ERROR("Error in getting LPAppHandle for %s",WIFI_LUNA_PREFS_ID);
 		return FALSE;
 	}
 
@@ -354,15 +393,14 @@ gboolean store_wifi_setting(wifi_setting_type_t setting, void *data)
 				char *profile_list_str = add_wifi_profile_list();
 				if(NULL == profile_list_str)
 				{
-					g_message("No wifi profiles found");
+					WCA_LOG_DEBUG("No wifi profiles found");
 					goto Exit;
 				}
 				lpErr = LPAppSetValue(handle, SettingKey[setting], profile_list_str);
-				g_message("Setting value : %s",profile_list_str);
 				g_free(profile_list_str);
 				if (lpErr)
 				{
-					g_message("Error in executing LPAppSetValue for %s",SettingKey[setting]);
+					WCA_LOG_ERROR("Error in executing LPAppSetValue for %s",SettingKey[setting]);
 					goto Exit;
 				}
 				ret = TRUE;

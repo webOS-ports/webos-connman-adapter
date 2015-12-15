@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-*      Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+*      Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 
 #include "wifi_profile.h"
 #include "wifi_setting.h"
+#include "logging.h"
 
 static GSList *wifi_profile_list = NULL;
 static guint gprofile_id = 777; //! First assigned profile ID
@@ -76,7 +77,7 @@ wifi_profile_t *get_profile_by_ssid(gchar *ssid)
  * For open networks we only need to add its ssid and generate a profile ID
  * However more fields to be added when supporting secured wifi networks.
  */
-void create_new_profile(gchar *ssid)
+void create_new_profile(gchar *ssid, GStrv security, gboolean hidden)
 {
 	if(NULL == ssid)
 		return;
@@ -84,15 +85,24 @@ void create_new_profile(gchar *ssid)
 	wifi_profile_t *new_profile = g_new0(wifi_profile_t, 1);
 	if(NULL == new_profile)
 	{
-		g_error("Out of memory!");
+		WCA_LOG_FATAL("Out of memory!");
 		return;
 	}
 	new_profile->profile_id = gprofile_id++;
 	new_profile->ssid = g_strdup(ssid);
+	new_profile->hidden = hidden;
+	if(NULL != security)
+	{
+		gsize i;
+		new_profile->security = (GStrv) g_new0(GStrv, 1);
+		for (i = 0; i < g_strv_length(security); i++)
+		{
+			new_profile->security[i] = g_strdup(security[i]);
+		}
+	}
 
 	wifi_profile_list = g_slist_append(wifi_profile_list, (gpointer)new_profile);
 	/* Store wifi profiles */
-	g_message("*********** STORING WIFI PROFILE %s************",ssid);
 	store_wifi_setting(WIFI_PROFILELIST_SETTING, NULL);
 }
 
@@ -112,6 +122,7 @@ void delete_profile(wifi_profile_t *profile)
 		wifi_profile_list = g_slist_remove_link( wifi_profile_list, g_slist_find(wifi_profile_list, profile));
 	}
 	g_free(profile->ssid);
+	g_strfreev(profile->security);
 	g_free(profile);
 	profile = NULL;
 	store_wifi_setting(WIFI_PROFILELIST_SETTING, NULL);

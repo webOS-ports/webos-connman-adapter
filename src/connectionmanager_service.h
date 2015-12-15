@@ -17,30 +17,28 @@
 * LICENSE@@@ */
 
 /**
- * @file  wifi_service.h
+ * @file  connectionmanager_service.h
  *
  */
 
-
-#ifndef _WIFI_SERVICE_H_
-#define _WIFI_SERVICE_H_
+#ifndef _CONNECTIONMANAGER_SERVICE_H_
+#define _CONNECTIONMANAGER_SERVICE_H_
 
 #include <luna-service2/lunaservice.h>
 
-#define WIFI_LUNA_SERVICE_NAME "com.palm.wifi"
+#define CONNECTIONMANAGER_LUNA_SERVICE_NAME "com.palm.connectionmanager"
 
 /**
- * @name Luna WiFi Method Names
+ * @name Luna Connectionmanager Method Names
  * @{
  */
-#define LUNA_METHOD_CONNECT                 "connect"
-#define LUNA_METHOD_FINDNETWORKS            "findnetworks" 
-#define LUNA_METHOD_DELETEPROFILE           "deleteprofile"
-#define LUNA_METHOD_GETPROFILE              "getprofile"
-#define LUNA_METHOD_GETPROFILELIST          "getprofilelist"
-#define LUNA_METHOD_GETSTATUS               "getstatus"
-#define LUNA_METHOD_SETSTATE                "setstate"
+#define LUNA_METHOD_GETSTATUS		"getstatus"
+#define LUNA_METHOD_SETIPV4		"setipv4"
+#define LUNA_METHOD_SETDNS		"setdns"
+#define LUNA_METHOD_SETSTATE		"setstate"
+#define LUNA_METHOD_GETINFO		"getinfo"
 
-extern int initialize_wifi_ls2_calls(GMainLoop *mainloop);
+extern void connectionmanager_send_status(void);
+extern int initialize_connectionmanager_ls2_calls(GMainLoop *mainloop);
 
-#endif /* _WIFI_SERVICE_H_ */
+#endif /* _CONNECTIONMANAGER_SERVICE_H_ */

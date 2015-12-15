@@ -1,6 +1,6 @@
 /* @@@LICENSE
 *
-*      Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+*      Copyright (c) 2012-2013 LG Electronics, Inc.
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -19,17 +19,19 @@
 /**
  * @file connman_service.c
  *
- * @brief Connman service interface
+ *   Connman service interface
  *
  */
 
 #include "connman_service.h"
+#include "utils.h"
+#include "logging.h"
+
+/* gdbus default timeout is 25 seconds */
+#define DBUS_CALL_TIMEOUT	(60 * 1000)
 
 /**
- * @brief  Check if the type of the service is wifi
- *
- * @param  service
- *
+ * Check if the type of the service is wifi (see header for API details)
  */
 
 gboolean connman_service_type_wifi(connman_service_t *service)
@@ -40,10 +42,7 @@ gboolean connman_service_type_wifi(connman_service_t *service)
 }
 
 /**
- * @brief  Check if the type of the service is ethernet
- *
- * @param  service
- *
+ * Check if the type of the service is ethernet (see header for API details)
  */
 
 gboolean connman_service_type_ethernet(connman_service_t *service)
@@ -54,11 +53,8 @@ gboolean connman_service_type_ethernet(connman_service_t *service)
 }
 
 /**
- * @brief  Map the service connection status to corresponding webos state
- * This function is required to send appropriate connection status to the webos world.
- *
- * @param  connman_state
- *
+ * Map the service connection status to corresponding webos state 
+ * (see header for API details)
  */
 
 gchar *connman_service_get_webos_state(int connman_state)
@@ -77,17 +73,16 @@ gchar *connman_service_get_webos_state(int connman_state)
 			return "ipConfigured";
 		case CONNMAN_SERVICE_STATE_FAILURE:
 			return "ipFailed";
-        	break;
-    }
+		default:
+			break;
+	}
 
-    return "notAssociated";
+	return "notAssociated";
 }
 
 /**
- * @brief  Convert the connection state string to its enum value
- *
- * @param  state
- *
+ * Convert the connection state string to its enum value
+ * (see header for API details)
  */
 
 int connman_service_get_state(const gchar *state)
@@ -116,38 +111,52 @@ int connman_service_get_state(const gchar *state)
 }
 
 /**
- * @brief  Connect to a remote connman service
- *
- * @param  service
- *
+ * Asynchronous connect callback for a remote "connect" call
  */
-
-gboolean connman_service_connect(connman_service_t *service)
+static void connect_callback(GDBusConnection *connection, GAsyncResult *res, gpointer user_data)
 {
-	if(NULL == service)
-		return FALSE;
-
 	GError *error = NULL;
-	gboolean ret = TRUE;
+	struct cb_data *cbd = user_data;
+	connman_service_t *service = cbd->user;
+	connman_service_connect_cb cb = cbd->cb;
+	gboolean ret = FALSE;
 
-	connman_interface_service_call_connect_sync(service->remote, NULL, &error);
+	ret = connman_interface_service_call_connect_finish(service->remote, res, &error);
 	if (error)
 	{
-		g_message("Error: %s", error->message);
+		WCA_LOG_CRITICAL("Error: %s", error->message);
 		/* If the error is "AlreadyConnected" its not an error */
-		if(NULL == g_strrstr(error->message,"AlreadyConnected"))
-			ret = FALSE;
+		if (NULL != g_strrstr(error->message,"AlreadyConnected"))
+			ret = TRUE;
 		g_error_free(error);
 	}
-	return ret;
+
+	if (cb != NULL)
+		cb(ret, cbd->data);
+	g_free(cbd);
+}
+
+/**
+ * Connect to a remote connman service (see header for API details)
+ */
+
+gboolean connman_service_connect(connman_service_t *service, connman_service_connect_cb cb, gpointer user_data)
+{
+	struct cb_data *cbd;
+
+	if (NULL == service)
+		return FALSE;
+
+	cbd = cb_data_new(cb, user_data);
+	cbd->user = service;
+	connman_interface_service_call_connect(service->remote, NULL, (GAsyncReadyCallback) connect_callback, cbd);
+
+	return TRUE;
 }
 
 
 /**
- * @brief  Disconnect from a remote connman service
- *
- * @param  service
- *
+ * Disconnect from a remote connman service (see header for API details)
  */
 
 gboolean connman_service_disconnect(connman_service_t *service)
@@ -160,7 +169,28 @@ gboolean connman_service_disconnect(connman_service_t *service)
 	connman_interface_service_call_disconnect_sync(service->remote, NULL, &error);
 	if (error)
 	{
-		g_message("Error: %s", error->message);
+		WCA_LOG_CRITICAL("Error: %s", error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/**
+ * Remove a remote connman service (see header for API details)
+ */
+
+gboolean connman_service_remove(connman_service_t *service)
+{
+	if(NULL == service)
+		return FALSE;
+
+	GError *error = NULL;
+
+	connman_interface_service_call_remove_sync(service->remote, NULL, &error);
+	if (error)
+	{
+		WCA_LOG_CRITICAL("Error: %s", error->message);
 		g_error_free(error);
 		return FALSE;
 	}
@@ -169,10 +199,90 @@ gboolean connman_service_disconnect(connman_service_t *service)
 
 
 /**
- * @brief  Get all the network related information for a connected service (in online state)
- *
- * @param  service
- *
+ * Sets ipv4 properties for the connman service (see header for API details)
+ */
+
+gboolean connman_service_set_ipv4(connman_service_t *service, ipv4info_t *ipv4)
+{
+	if(NULL == service || NULL == ipv4)
+		return FALSE;
+
+	GVariantBuilder *ipv4_b;
+	GVariant *ipv4_v;
+
+	ipv4_b = g_variant_builder_new (G_VARIANT_TYPE ("a{sv}"));
+	if(NULL != ipv4->method)
+		g_variant_builder_add (ipv4_b, "{sv}", "Method", g_variant_new_string(ipv4->method));
+	if(NULL != ipv4->address)
+		g_variant_builder_add (ipv4_b, "{sv}", "Address", g_variant_new_string(ipv4->address));
+	if(NULL != ipv4->netmask)
+		g_variant_builder_add (ipv4_b, "{sv}", "Netmask", g_variant_new_string(ipv4->netmask));
+	if(NULL != ipv4->gateway)
+		g_variant_builder_add (ipv4_b, "{sv}", "Gateway", g_variant_new_string(ipv4->gateway));
+	ipv4_v = g_variant_builder_end (ipv4_b);
+
+	GError *error = NULL;
+
+	connman_interface_service_call_set_property_sync(service->remote, "IPv4.Configuration", g_variant_new_variant(ipv4_v), NULL, &error);
+	if (error)
+	{
+		WCA_LOG_CRITICAL("Error: %s", error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/**
+ * Sets nameservers for the connman service (see header for API details)
+ */
+
+gboolean connman_service_set_nameservers(connman_service_t *service, GStrv dns)
+{
+	if(NULL == service || NULL == dns)
+		return FALSE;
+
+	GError *error = NULL;
+
+	connman_interface_service_call_set_property_sync(service->remote, "Nameservers.Configuration",
+			g_variant_new_variant(g_variant_new_strv((const gchar * const*)dns, g_strv_length(dns))), NULL, &error);
+	if (error)
+	{
+		WCA_LOG_CRITICAL("Error: %s", error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/**
+ * Set auto-connect property for the given service (see header for API details)
+ */
+
+gboolean connman_service_set_autoconnect(connman_service_t *service, gboolean value)
+{
+	if(NULL == service)
+		return FALSE;
+
+	GError *error = NULL;
+
+	connman_interface_service_call_set_property_sync(service->remote,
+						  "AutoConnect",
+						  g_variant_new_variant(g_variant_new_boolean(value)),
+						  NULL, &error);
+	if (error)
+	{
+		WCA_LOG_CRITICAL("%s", error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/**
+ * Get all the network related information for a connected service (in online state)
+ * (see header for API details)
  */
 
 gboolean connman_service_get_ipinfo(connman_service_t *service)
@@ -187,7 +297,7 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 	connman_interface_service_call_get_properties_sync(service->remote, &properties, NULL, &error);
 	if (error)
 	{
-		g_message("Error: %s", error->message);
+		WCA_LOG_CRITICAL("Error: %s", error->message);
 		g_error_free(error);
 		return FALSE;
 	}
@@ -213,6 +323,7 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 				{
 					GVariant *ifacev = g_variant_get_child_value(ethernet, 1);
 					GVariant *ifaceva = g_variant_get_variant(ifacev);
+					g_free(service->ipinfo.iface);
 					service->ipinfo.iface = g_variant_dup_string(ifaceva, NULL);
 				}
 	  		}
@@ -227,24 +338,33 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 				GVariant *ipv4 = g_variant_get_child_value(va, j);
 				GVariant *ikey_v = g_variant_get_child_value(ipv4, 0);
 				const gchar *ikey = g_variant_get_string(ikey_v, NULL);
-
+				if(g_str_equal(ikey, "Method"))
+				{
+					GVariant *netmaskv = g_variant_get_child_value(ipv4, 1);
+					GVariant *netmaskva = g_variant_get_variant(netmaskv);
+					g_free(service->ipinfo.ipv4.method);
+					service->ipinfo.ipv4.method = g_variant_dup_string(netmaskva, NULL);
+				}
 				if(g_str_equal(ikey, "Netmask"))
 				{
 					GVariant *netmaskv = g_variant_get_child_value(ipv4, 1);
 					GVariant *netmaskva = g_variant_get_variant(netmaskv);
-					service->ipinfo.netmask = g_variant_dup_string(netmaskva, NULL);
+					g_free(service->ipinfo.ipv4.netmask);
+					service->ipinfo.ipv4.netmask = g_variant_dup_string(netmaskva, NULL);
 				}
 				if(g_str_equal(ikey, "Address"))
 				{
 					GVariant *addressv = g_variant_get_child_value(ipv4, 1);
 					GVariant *addressva = g_variant_get_variant(addressv);
-					service->ipinfo.address = g_variant_dup_string(addressva, NULL);
+					g_free(service->ipinfo.ipv4.address);
+					service->ipinfo.ipv4.address = g_variant_dup_string(addressva, NULL);
 				}
 				if(g_str_equal(ikey, "Gateway"))
 				{
 					GVariant *gatewayv = g_variant_get_child_value(ipv4, 1);
 					GVariant *gatewayva = g_variant_get_variant(gatewayv);
-					service->ipinfo.gateway = g_variant_dup_string(gatewayva, NULL);
+					g_free(service->ipinfo.ipv4.gateway);
+					service->ipinfo.ipv4.gateway = g_variant_dup_string(gatewayva, NULL);
 				}
 			  }
 			}
@@ -252,6 +372,7 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 		{
 			GVariant *v = g_variant_get_child_value(property, 1);
 			GVariant *va = g_variant_get_child_value(v, 0);
+			g_strfreev(service->ipinfo.dns);
 			service->ipinfo.dns = g_variant_dup_strv(va, NULL);
 		}
 	}
@@ -260,13 +381,7 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 
 
 /**
- * @brief  Callback for service's "property_changed" signal
- *
- * @param  proxy
- * @param  property
- * @param  v
- * @param  service
- *
+ * Callback for service's "property_changed" signal
  */
 
 static void
@@ -283,7 +398,9 @@ property_changed_cb(ConnmanInterfaceService *proxy, gchar * property, GVariant *
 		(service->handle_state_change_fn)((gpointer)service, service->state);
 }
 
-
+/**
+ * Register for service's state changed case  (see header for API details)
+ */
 void connman_service_register_state_changed_cb(connman_service_t *service, connman_state_changed_cb func)
 {
 	if(NULL == func)
@@ -291,23 +408,35 @@ void connman_service_register_state_changed_cb(connman_service_t *service, connm
         service->handle_state_change_fn = func;
 }
 
+/** 
+ * Retrieve the list of properties for a service (see header for API details)
+ */
+GVariant *connman_service_fetch_properties(connman_service_t *service)
+{
+	GError *error = NULL;
+	GVariant *properties;
+
+	connman_interface_service_call_get_properties_sync(service->remote, &properties, NULL, &error);
+	if (error)
+	{
+		WCA_LOG_CRITICAL("Error: %s", error->message);
+		g_error_free(error);
+		return NULL;
+	}
+	return properties;
+}
 
 /**
- * @brief Update service properties from the supplied variant
- *
- * @param service_v
+ * Update service properties from the supplied variant  (see header for API details)
  */
 
-void connman_service_update_properties(connman_service_t *service, GVariant *service_v)
+void connman_service_update_properties(connman_service_t *service, GVariant *properties)
 {
-	if(NULL == service || NULL == service_v)
+	if(NULL == service || NULL == properties)
 		return;
 
-	GVariant *properties;
 	gsize i;
 	
-	properties = g_variant_get_child_value(service_v, 1);
-
 	for (i = 0; i < g_variant_n_children(properties); i++)
 	{
 		GVariant *property = g_variant_get_child_value(properties, i);
@@ -315,11 +444,12 @@ void connman_service_update_properties(connman_service_t *service, GVariant *ser
 		GVariant *val_v = g_variant_get_child_value(property, 1);
 		GVariant *val = g_variant_get_variant(val_v);
 		const gchar *key = g_variant_get_string(key_v, NULL);
-
 		if (g_str_equal(key, "Name"))
+		{
+			g_free(service->name);
 			service->name =  g_variant_dup_string(val, NULL);
-
-		if (g_str_equal(key, "Type"))
+		}
+		else if (g_str_equal(key, "Type"))
 		{
 			const gchar *v = g_variant_get_string(val, NULL);
 
@@ -329,33 +459,32 @@ void connman_service_update_properties(connman_service_t *service, GVariant *ser
 			if (g_str_equal(v, "ethernet"))
 				service->type = CONNMAN_SERVICE_TYPE_ETHERNET;
 		}
-
-		if (g_str_equal(key, "State"))
+		else if (g_str_equal(key, "State"))
+		{
+			g_free(service->state);
 			service->state =  g_variant_dup_string(val, NULL);
-
-		if (g_str_equal(key, "Strength"))
+			// Only a hidden service gets added as a new service with "association" state
+			if(g_str_equal(service->state, "association"))
+				service->hidden = TRUE;
+		}
+		else if (g_str_equal(key, "Strength"))
 			service->strength = g_variant_get_byte(val);
-
-		if(g_str_equal(key, "Security")) 
+		else if(g_str_equal(key, "Security"))
+		{
+			g_strfreev(service->security);
 			service->security = g_variant_dup_strv(val, NULL);
-
-		if (g_str_equal(key, "AutoConnect"))
+		}
+		else if (g_str_equal(key, "AutoConnect"))
 			service->auto_connect = g_variant_get_boolean(val);
-
-		if (g_str_equal(key, "Immutable"))
+		else if (g_str_equal(key, "Immutable"))
 			service->immutable = g_variant_get_boolean(val);
-
-		if (g_str_equal(key, "Favorite"))
+		else if (g_str_equal(key, "Favorite"))
 			service->favorite = g_variant_get_boolean(val);
-
 	}
 }
 
 /**
- * @brief  Create a new connman service instance and set its properties
- *
- * @param  variant
- *
+ * Create a new connman service instance and set its properties  (see header for API details)
  */
 
 connman_service_t *connman_service_new(GVariant *variant)
@@ -366,12 +495,10 @@ connman_service_t *connman_service_new(GVariant *variant)
 	connman_service_t *service = g_new0(connman_service_t, 1);
 	if(service == NULL)
 	{
-		g_error("Out of memory !!!");
+		WCA_LOG_FATAL("Out of memory !!!");
 		return NULL;
 	}
 
-	service->path = service->name = service->state = NULL;
-	
 	GVariant *service_v = g_variant_get_child_value(variant, 0);
 	service->path = g_variant_dup_string(service_v, NULL);
 	
@@ -386,28 +513,26 @@ connman_service_t *connman_service_new(GVariant *variant)
 								&error);
 	if (error)
 	{
-		g_error("%s", error->message);
+		WCA_LOG_CRITICAL("%s", error->message);
 		g_error_free(error);
+		g_free(service);
 		return NULL;
 	}
 
-	service->handle_state_change_fn = NULL;
+	g_dbus_proxy_set_default_timeout(service->remote, DBUS_CALL_TIMEOUT);
 
 	service->sighandler_id = g_signal_connect_data(G_OBJECT(service->remote), "property-changed",
 		G_CALLBACK(property_changed_cb), service, NULL, 0);
 
-	connman_service_update_properties(service, variant);
+	GVariant *properties = g_variant_get_child_value(variant, 1);
+	connman_service_update_properties(service, properties);
 
 	return service;
 }
 
 
 /**
- * @brief  Free the connman service instance 
- *
- * @param  data
- * @param  user_data
- *
+ * Free the connman service instance  (see header for API details)
  */
 
 void connman_service_free(gpointer data, gpointer user_data)
@@ -422,9 +547,10 @@ void connman_service_free(gpointer data, gpointer user_data)
 	g_free(service->state);
 	g_strfreev(service->security);
 	g_free(service->ipinfo.iface);
-	g_free(service->ipinfo.address);
-	g_free(service->ipinfo.netmask);
-	g_free(service->ipinfo.gateway);
+	g_free(service->ipinfo.ipv4.method);
+	g_free(service->ipinfo.ipv4.address);
+	g_free(service->ipinfo.ipv4.netmask);
+	g_free(service->ipinfo.ipv4.gateway);
 	g_strfreev(service->ipinfo.dns);
 
 	if(service->sighandler_id)

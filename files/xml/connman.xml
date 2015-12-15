@@ -1,6 +1,6 @@
 <!-- LICENSE@@@
 
-Copyright (c) 2012 Hewlett-Packard Development Company, L.P.
+Copyright (c) 2012-2013 LG Electronics, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -91,10 +91,28 @@ limitations under the License.
 		</method>
 		<method name="Disconnect">
 		</method>
+		<method name="Remove">
+		</method>
 		<signal name="PropertyChanged">
 			<arg type="s"/>
 			<arg type="v"/>
 		</signal>
 	</interface>
-
+	<interface name="net.connman.Agent">
+		<method name="Release">
+		</method>
+		<method name="ReportError">
+			<arg type="o" direction="in"/>
+			<arg type="s" direction="in"/>
+		</method>
+		<method name="RequestBrowser">
+			<arg type="o" direction="in"/>
+			<arg type="s" direction="in"/>
+		</method>
+		<method name="RequestInput">
+			<arg type="o" direction="in"/>
+			<arg type="a{sv}" direction="in"/>
+			<arg type="a{sv}" direction="out"/>
+		</method>
+	</interface>
 </node>
