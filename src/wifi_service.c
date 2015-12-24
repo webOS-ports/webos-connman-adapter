@@ -73,6 +73,7 @@ errorText | Yes | String | Error description
 #define MID_SIGNAL_RANGE_HIGH	50
 
 typedef struct connection_settings {
+	char *identity;
 	char *passkey;
 	char *ssid;
 	bool wpsmode;
@@ -101,6 +102,7 @@ static connection_settings_t* connection_settings_new(void)
 
 static void connection_settings_free(connection_settings_t *settings)
 {
+	g_free(settings->identity);
 	g_free(settings->passkey);
 	g_free(settings->ssid);
 	g_free(settings->wpspin);
@@ -381,10 +383,11 @@ static void add_service(connman_service_t *service, jvalue_ref *network)
 		jvalue_ref security_list = jarray_create(NULL);
 		for (i = 0; i < g_strv_length(service->security); i++)
 		{
-			// We do not support enterprise security i.e "ieee8021x" security type
-			if(!g_strcmp0(service->security[i],"ieee8021x"))
-				supported = FALSE;
-			else if(!g_strcmp0(service->security[i],"none"))
+			/*Initial work to support ieee8021x*/
+			// (We did not support enterprise security i.e "ieee8021x" security type)
+			/*if(!g_strcmp0(service->security[i],"ieee8021x"))
+				supported = FALSE;*/
+			if(!g_strcmp0(service->security[i],"none"))
 				continue;
 			jarray_append(security_list, jstring_create(service->security[i]));
 		}
@@ -483,14 +486,21 @@ static GVariant* agent_request_input_callback(GVariant *fields, gpointer data)
 		}
 		else if (!strncmp(key, "Passphrase", 10))
 		{
-			/* FIXME we're ignoring the other fields here as we're only connecting to
-			 * psk secured networks at the moment */
 			if(NULL != settings->passkey)
 			{
 				g_variant_builder_add(vabuilder, "{sv}", "Passphrase",
 					g_variant_new("s", settings->passkey));
 			}
 		}
+		else if (!strncmp(key, "Identity", 10))
+		{
+			if(NULL != settings->identity)
+			{
+				g_variant_builder_add(vabuilder, "{sv}", "Identity",
+					g_variant_new("s", settings->identity));
+			}
+		}
+
 		else if (!strncmp(key, "WPS", 10))
 		{
 			if(settings->wpsmode)
@@ -538,12 +548,13 @@ static void connect_wifi_with_ssid(const char *ssid, jvalue_ref req_object, luna
 	jvalue_ref security_obj = NULL;
 	jvalue_ref simple_security_obj = NULL;
 	jvalue_ref enterprise_security_obj = NULL;
+	jvalue_ref identity_obj = NULL;
 	jvalue_ref passkey_obj = NULL;
 	jvalue_ref hidden_obj = NULL;
 	jvalue_ref wps_obj = NULL;
 	jvalue_ref wpspin_obj = NULL;
 
-	raw_buffer passkey_buf, wpspin_buf;
+	raw_buffer identity_buf, passkey_buf, wpspin_buf;
 	GSList *ap;
 	gboolean found_service = FALSE, psk_security = FALSE;
 	connection_settings_t *settings = NULL;
@@ -625,10 +636,14 @@ static void connect_wifi_with_ssid(const char *ssid, jvalue_ref req_object, luna
 			settings->passkey = strdup(passkey_buf.m_str);
 			jstring_free_buffer(passkey_buf);
 		}
-		else if (jobject_get_exists(security_obj, J_CSTR_TO_BUF("enterpriseSecurity"), &enterprise_security_obj))
+		else if (jobject_get_exists(security_obj, J_CSTR_TO_BUF("enterpriseSecurity"), &enterprise_security_obj) &&
+			 jobject_get_exists(enterprise_security_obj, J_CSTR_TO_BUF("identityEAP"), &identity_obj) &&
+			 jobject_get_exists(enterprise_security_obj, J_CSTR_TO_BUF("passKey"), &passkey_obj))
 		{
-			LSMessageReplyCustomError(service_req->handle, service_req->message, "Not implemented");
-			goto cleanup;
+			identity_buf = jstring_get(identity_obj);
+			settings->identity = strdup(identity_buf.m_str);			
+			passkey_buf = jstring_get(passkey_obj);
+			settings->passkey = strdup(passkey_buf.m_str);
 		}
 		else if (jobject_get_exists(security_obj, J_CSTR_TO_BUF("wps"), &wps_obj))
 		{
@@ -943,7 +958,7 @@ None
  *  luna://com.palm.wifi/connect '{"ssid":"<Name of the access point>",
  *                                 "security": { "securityType": "",
  *                                     "simpleSecurity": { "passKey": "<passphrase for the network>" },
- *                                     "enterpriseSecurity": { ... }
+ *                                     "enterpriseSecurity": { "idenTity": "<username for the network", "passKey": "<passphrase for the network>"  }
  *                                 }
  *                                }'
  *  luna://com.palm.wifi/connect '{"profileId":<Profile ID>}'`
