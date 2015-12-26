@@ -644,6 +644,8 @@ static void connect_wifi_with_ssid(const char *ssid, jvalue_ref req_object, luna
 			settings->identity = strdup(identity_buf.m_str);			
 			passkey_buf = jstring_get(passkey_obj);
 			settings->passkey = strdup(passkey_buf.m_str);
+			jstring_free_buffer(identity_buf);
+			jstring_free_buffer(passkey_buf);
 		}
 		else if (jobject_get_exists(security_obj, J_CSTR_TO_BUF("wps"), &wps_obj))
 		{
@@ -958,7 +960,7 @@ None
  *  luna://com.palm.wifi/connect '{"ssid":"<Name of the access point>",
  *                                 "security": { "securityType": "",
  *                                     "simpleSecurity": { "passKey": "<passphrase for the network>" },
- *                                     "enterpriseSecurity": { "idenTity": "<username for the network", "passKey": "<passphrase for the network>"  }
+ *                                     "enterpriseSecurity": { "identity": "<username for the network", "passKey": "<passphrase for the network>"  }
  *                                 }
  *                                }'
  *  luna://com.palm.wifi/connect '{"profileId":<Profile ID>}'`
