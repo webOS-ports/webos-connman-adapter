@@ -28,7 +28,7 @@
 
 #include "connman_common.h"
 
-/** 
+/**
  * IPv4 information structure for the service
  *
  * Includes method (dhcp/manual), ip address, netmask and gateway address
@@ -218,16 +218,26 @@ extern gboolean connman_service_set_autoconnect(connman_service_t *service, gboo
  */
 extern gboolean connman_service_get_ipinfo(connman_service_t *service);
 
-/** 
+/**
  * Retrieve the list of properties for a service
  *
  * @param[IN] service A service instance
- * 
- * @return GVariant pointer listing service properties, NULL if the call to 
+ *
+ * @return GVariant pointer listing service properties, NULL if the call to
            get service properties failed
  */
 
 extern GVariant *connman_service_fetch_properties(connman_service_t *service);
+
+/**
+ * Get the MAC address for a connected service (in online state)
+ *
+ * @param[IN]  service A service instance
+ *
+ * @return NULL if the retrieval of the MAC address failed, the string of the MAC address otherwise.
+ *         Returned string is "HH:HH:HH:HH:HH:HH\0"
+ */
+extern const gchar *get_service_mac_address(connman_service_t *service);
 
 /**
  * Update service properties from the supplied variant

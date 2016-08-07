@@ -87,7 +87,7 @@ static void update_connection_status(connman_service_t *connected_service, jvalu
 			jobject_put(*status, J_CSTR_TO_JVAL("netmask"), jstring_create(connected_service->ipinfo.ipv4.netmask));
 		if(NULL != connected_service->ipinfo.ipv4.gateway)
 			jobject_put(*status, J_CSTR_TO_JVAL("gateway"), jstring_create(connected_service->ipinfo.ipv4.gateway));
-		
+
 		gsize i;
 		char dns_str[16];
 		for (i = 0; i < g_strv_length(connected_service->ipinfo.dns); i++)
@@ -98,7 +98,7 @@ static void update_connection_status(connman_service_t *connected_service, jvalu
 
 		if(NULL != connected_service->ipinfo.ipv4.method)
 			jobject_put(*status, J_CSTR_TO_JVAL("method"), jstring_create(connected_service->ipinfo.ipv4.method));
-			
+
 		if(connman_service_type_wifi(connected_service))
 		{
 			if(NULL != connected_service->name)
@@ -521,7 +521,7 @@ Exit:
 @{
 @section com_webos_connectionmanager_setdns setdns
 
-Change the DNS servers for the network. 
+Change the DNS servers for the network.
 
 If an SSID field is not provided in the request, the modifications are
 applied to the wired connection.
@@ -832,37 +832,6 @@ cleanup:
 
 }
 
-#define MAC_ADDR_LEN    6
-
-// mac_address must be a pointer to a buffer of at least length 18 (12 hex digits + 5 colons + a null)
-//
-// Return string is "HH:HH:HH:HH:HH:HH\0"
-
-static int get_wifi_mac_address(const char *interface, char *mac_address)
-{
-        struct ifreq ifr;
-        int s;
-        int ret = -1;
-
-        s = socket(AF_INET, SOCK_DGRAM, 0);
-        if(s == -1)
-        {
-                return ret;
-        }
-
-        strcpy(ifr.ifr_name, interface);
-        if(ioctl(s, SIOCGIFHWADDR, &ifr) == 0)
-        {
-                int i;
-                for(i = 0; i < MAC_ADDR_LEN; i++)
-                {
-                        sprintf(&mac_address[i*3], "%02X%s", (unsigned char)ifr.ifr_hwaddr.sa_data[i], (i < (MAC_ADDR_LEN - 1)) ? ":" : "");
-                }
-                ret = 0;
-        }
-        return ret;
-}
-
 //->Start of API documentation comment block
 /**
 @page com_webos_connectionmanager com.webos.connectionmanager
@@ -905,11 +874,13 @@ static bool handle_get_info_command(LSHandle *sh, LSMessage *message, void* cont
 	jvalue_ref reply = jobject_create();
 	LSError lserror;
 	LSErrorInit(&lserror);
-	char wifi_mac_address[32]={0}, wired_mac_address[32]={0};
 
 	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
-	if(get_wifi_mac_address(CONNMAN_WIFI_INTERFACE_NAME, wifi_mac_address) == 0)
+
+	connman_service_t *connected_wifi_service = connman_manager_get_connected_service(manager->wifi_services);
+	const gchar *wifi_mac_address = get_service_mac_address(connected_wifi_service);
+	if(wifi_mac_address != NULL)
 	{
 		jvalue_ref wifi_info = jobject_create();
 		jobject_put(wifi_info, J_CSTR_TO_JVAL("macAddress"),jstring_create(wifi_mac_address));
@@ -919,7 +890,9 @@ static bool handle_get_info_command(LSHandle *sh, LSMessage *message, void* cont
 		WCA_LOG_ERROR("Error in fetching mac address for wifi interface");
 
 
-	if(get_wifi_mac_address(CONNMAN_WIRED_INTERFACE_NAME, wired_mac_address) == 0)
+	connman_service_t *connected_wired_service = connman_manager_get_connected_service(manager->wired_services);
+	const gchar *wired_mac_address = get_service_mac_address(connected_wired_service);
+	if(wired_mac_address != NULL)
 	{
 		jvalue_ref wired_info = jobject_create();
 		jobject_put(wired_info, J_CSTR_TO_JVAL("macAddress"),jstring_create(wired_mac_address));
