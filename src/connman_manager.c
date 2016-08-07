@@ -167,38 +167,15 @@ static gboolean service_on_configured_iface(GVariant	*service_v)
 		GVariant *key_v = g_variant_get_child_value(property, 0);
 		const gchar *key = g_variant_get_string(key_v, NULL);
 
-		if (g_str_equal(key, "Ethernet"))
-		{
-			GVariant *v = g_variant_get_child_value(property, 1);
-			GVariant *va = g_variant_get_child_value(v, 0);
-			gsize j;
-			for(j = 0; j < g_variant_n_children(va); j++)
-		  	{
-				GVariant *ethernet = g_variant_get_child_value(va, j);
-				GVariant *ekey_v = g_variant_get_child_value(ethernet, 0);
-				const gchar *ekey = g_variant_get_string(ekey_v, NULL);
-
-				if(g_str_equal(ekey, "Interface"))
-				{
-					GVariant *ifacev = g_variant_get_child_value(ethernet, 1);
-					GVariant *ifaceva = g_variant_get_variant(ifacev);
-					const gchar *iface = g_variant_get_string(ifaceva, NULL);
-					if(g_str_equal(iface,CONNMAN_WIFI_INTERFACE_NAME) ||
-						g_str_equal(iface,CONNMAN_WIRED_INTERFACE_NAME) ||
-						g_str_equal(iface,CONNMAN_CELLULAR_INTERFACE_NAME))
-						return TRUE;
-					else
-						return FALSE;
-				}
-		  	}
-		}
-		else if (g_str_equal(key, "Type"))
+		if (g_str_equal(key, "Type"))
 		{
 			GVariant *v = g_variant_get_child_value(property, 1);
 			GVariant *va = g_variant_get_variant(v);
 			const gchar *value = g_variant_get_string(va, NULL);
 
-			if (g_strcmp0(value, "cellular") == 0)
+			if (g_strcmp0(value, "cellular") == 0 ||
+			    g_strcmp0(value, "wifi")     == 0 ||
+			    g_strcmp0(value, "ethernet") == 0)
 				return TRUE;
 		}
 	}
@@ -208,11 +185,11 @@ static gboolean service_on_configured_iface(GVariant	*service_v)
 /**
  * Compare the signal strengths of services and sort the list based on decreasing
  * signal strength. However the hidden service (if any) will always be put at the end of the list.
- */ 
+ */
 
 static gint compare_signal_strength(connman_service_t *service1, connman_service_t *service2)
 {
-	if(service2->name == NULL) 
+	if(service2->name == NULL)
 		return -1;	// let the hidden service be added to the list
 				// after all non-hidden services
 	else if(service1->name == NULL)
@@ -271,7 +248,7 @@ static gboolean connman_manager_update_services(connman_manager_t *manager, GVar
 		{
 			service = find_service_from_props(manager, service_v);
 			if(NULL != service)
-			{		
+			{
 				GVariant *properties = g_variant_get_child_value(service_v, 1);
 				WCA_LOG_DEBUG("Updating service %s",service->name);
 				connman_service_update_properties(service, properties);
@@ -321,7 +298,7 @@ static gboolean remove_services_from_list(GSList **service_list, gchar **service
 		services_removed_iter = services_removed_iter + 1;
 	}
 
-	/* 
+	/*
 	 * do the actual remove of services in an extra loop, so we don't
 	 * alter the list we're walking
 	 */
@@ -415,7 +392,7 @@ static gboolean connman_manager_add_services(connman_manager_t *manager)
 {
 	if(NULL == manager)
 		return FALSE;
-	
+
 	GError *error = NULL;
 	GVariant *services;
 	gsize i;
@@ -460,7 +437,7 @@ static gboolean connman_manager_add_technologies (connman_manager_t *manager)
 {
 	if(NULL == manager)
 		return FALSE;
-	
+
 	GError *error = NULL;
 	GVariant *technologies;
 	gsize i;
@@ -487,7 +464,7 @@ static gboolean connman_manager_add_technologies (connman_manager_t *manager)
 }
 
 /**
- * Check if the manager is not in offline mode and available to 
+ * Check if the manager is not in offline mode and available to
  * enable network connections (see header for API details)
  */
 
@@ -495,7 +472,7 @@ gboolean connman_manager_is_manager_available (connman_manager_t *manager)
 {
 	if(NULL == manager)
 		return FALSE;
-	
+
 	gsize i;
 	GVariant *properties = connman_manager_get_properties(manager);
 	if(NULL == properties)
@@ -609,7 +586,7 @@ connman_technology_t *connman_manager_find_cellular_technology (connman_manager_
 }
 
 /**
- * Go through the manager's given services list and get the one which is in 
+ * Go through the manager's given services list and get the one which is in
  * "ready" or "online" state (see header for API details)
  */
 
@@ -704,8 +681,8 @@ technology_removed_cb(ConnmanInterfaceManager *proxy, gchar * path,
  * Callback for manager's "services_changed" signal
  */
 
-static void 
-services_changed_cb(ConnmanInterfaceManager *proxy, GVariant *services_added, 
+static void
+services_changed_cb(ConnmanInterfaceManager *proxy, GVariant *services_added,
 		gchar **services_removed, connman_manager_t *manager)
 {
 	WCA_LOG_DEBUG("Services_changed ");

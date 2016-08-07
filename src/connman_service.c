@@ -60,13 +60,13 @@ gboolean connman_service_type_cellular(connman_service_t *service)
 }
 
 /**
- * Map the service connection status to corresponding webos state 
+ * Map the service connection status to corresponding webos state
  * (see header for API details)
  */
 
 gchar *connman_service_get_webos_state(int connman_state)
 {
-	switch (connman_state) 
+	switch (connman_state)
 	{
 		case CONNMAN_SERVICE_STATE_DISCONNECT:
 		case CONNMAN_SERVICE_STATE_IDLE:
@@ -95,7 +95,7 @@ gchar *connman_service_get_webos_state(int connman_state)
 int connman_service_get_state(const gchar *state)
 {
 	int result = CONNMAN_SERVICE_STATE_IDLE;
-	
+
 	if(NULL == state)
 		return result;
 
@@ -386,6 +386,47 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 	return TRUE;
 }
 
+/**
+ * Get the MAC address for a connected service (in online state)
+ */
+const gchar *get_service_mac_address(connman_service_t *connected_service)
+{
+	const gchar *mac_address = NULL;
+	int i = 0, j = 0;
+
+	if(NULL==connected_service) return NULL;
+
+	GVariant *service_props = connman_service_fetch_properties(connected_service);
+	for (i = 0; i < g_variant_n_children(service_props) && NULL==mac_address; i++)
+	{
+		GVariant *property = g_variant_get_child_value(service_props, i);
+		GVariant *key_v = g_variant_get_child_value(property, 0);
+		const gchar *key = g_variant_get_string(key_v, NULL);
+
+		if (g_str_equal(key, "Ethernet"))
+		{
+			GVariant *v = g_variant_get_child_value(property, 1);
+			GVariant *va = g_variant_get_child_value(v, 0);
+			gsize j;
+			for(j = 0; j < g_variant_n_children(va) && NULL==mac_address; j++)
+	  		{
+				GVariant *ethernet = g_variant_get_child_value(va, j);
+				GVariant *ekey_v = g_variant_get_child_value(ethernet, 0);
+				const gchar *ekey = g_variant_get_string(ekey_v, NULL);
+
+				if(g_str_equal(ekey, "Address"))
+				{
+					GVariant *addressv = g_variant_get_child_value(ethernet, 1);
+					GVariant *addressva = g_variant_get_variant(addressv);
+					mac_address = g_variant_get_string(addressva, NULL);
+				}
+	  		}
+		}
+	}
+
+	return mac_address;
+}
+
 
 /**
  * Callback for service's "property_changed" signal
@@ -415,7 +456,7 @@ void connman_service_register_state_changed_cb(connman_service_t *service, connm
         service->handle_state_change_fn = func;
 }
 
-/** 
+/**
  * Retrieve the list of properties for a service (see header for API details)
  */
 GVariant *connman_service_fetch_properties(connman_service_t *service)
@@ -443,7 +484,7 @@ void connman_service_update_properties(connman_service_t *service, GVariant *pro
 		return;
 
 	gsize i;
-	
+
 	for (i = 0; i < g_variant_n_children(properties); i++)
 	{
 		GVariant *property = g_variant_get_child_value(properties, i);
@@ -501,7 +542,7 @@ connman_service_t *connman_service_new(GVariant *variant)
 {
 	if(NULL == variant)
 		return NULL;
-	
+
 	connman_service_t *service = g_new0(connman_service_t, 1);
 	if(service == NULL)
 	{
@@ -511,7 +552,7 @@ connman_service_t *connman_service_new(GVariant *variant)
 
 	GVariant *service_v = g_variant_get_child_value(variant, 0);
 	service->path = g_variant_dup_string(service_v, NULL);
-	
+
 	GError *error = NULL;
 
 
