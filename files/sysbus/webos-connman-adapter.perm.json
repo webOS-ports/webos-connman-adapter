@@ -1,0 +1,22 @@
+{
+    "com.palm.wifi": [
+        "settings",
+        "devices",
+        "networking.internal"
+    ],
+    "com.palm.connectionmanager": [
+        "settings",
+        "devices",
+        "networking.internal"
+    ],
+    "com.palm.wan": [
+        "settings",
+        "devices",
+        "networking.internal"
+    ],
+    "com.palm.pan": [
+        "settings",
+        "devices",
+        "networking.internal"
+    ]
+}

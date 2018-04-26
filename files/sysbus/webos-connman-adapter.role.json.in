@@ -7,14 +7,14 @@
     "permissions": [
         {
             "service":"com.palm.wifi",
-            "inbound":["*"],
-            "outbound":["*"]
+            "outbound":["com.webos.settingsservice",
+                        "com.palm.wifi",
+                        "com.palm.connectionmanager"]
         },
         {
             "service":"com.palm.connectionmanager",
-            "inbound":["*"],
-            "outbound":["*"]
+            "outbound":["com.webos.settingsservice",
+                        "com.palm.wifi"]
         }
-
     ]
 }
