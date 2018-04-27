@@ -1,20 +1,18 @@
 {
-    "role": {
-        "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-connman-adapter",
-        "type": "regular",
-        "allowedNames": ["com.palm.wifi", "com.palm.connectionmanager"]
-    },
+    "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-connman-adapter",
+    "type": "regular",
+    "allowedNames": ["com.palm.wifi", "com.palm.connectionmanager"],
     "permissions": [
         {
             "service":"com.palm.wifi",
-            "outbound":["com.webos.settingsservice",
-                        "com.palm.wifi",
-                        "com.palm.connectionmanager"]
+            "inbound":["*"],
+            "outbound":["*"]
         },
         {
             "service":"com.palm.connectionmanager",
-            "outbound":["com.webos.settingsservice",
-                        "com.palm.wifi"]
+            "inbound":["*"],
+            "outbound":["*"]
         }
+
     ]
 }
