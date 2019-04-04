@@ -39,7 +39,7 @@
         "com.palm.wifi/setstate",
         "com.palm.wifi/startwps"
     ],
-    "networking": [
+    "public": [
         "com.palm.connectionmanager/checkinternetstatus",
         "com.palm.connectionmanager/findProxyForURL",
         "com.palm.connectionmanager/getinfo",
