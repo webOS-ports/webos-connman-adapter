@@ -2,7 +2,8 @@
     "com.palm.wifi": [
         "settings",
         "devices",
-        "networking.internal"
+        "networking.internal", 
+        "public"
     ],
     "com.palm.connectionmanager": [
         "settings",
