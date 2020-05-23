@@ -2,20 +2,29 @@
     "com.palm.wifi": [
         "settings",
         "devices",
-        "networking.internal", 
-        "public"
+        "networking.internal"
+    ],
+    "com.webos.service.wifi": [
+        "settings",
+        "devices",
+        "networking.internal"
     ],
     "com.palm.connectionmanager": [
         "settings",
         "devices",
         "networking.internal"
     ],
-    "com.palm.wan": [
+    "com.webos.service.connectionmanager": [
         "settings",
         "devices",
         "networking.internal"
     ],
     "com.palm.pan": [
+        "settings",
+        "devices",
+        "networking.internal"
+    ],
+    "com.webos.service.pan": [
         "settings",
         "devices",
         "networking.internal"
