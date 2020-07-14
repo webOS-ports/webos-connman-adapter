@@ -13,6 +13,12 @@
         "com.webos.service.connectionmanager/setProxy",
         "com.webos.service.connectionmanager/setstate",
         "com.webos.service.connectionmanager/setTechnologyState",
+        "com.webos.service.wan/connect",
+        "com.webos.service.wan/disconnect",
+        "com.webos.service.wan/getStatus",
+        "com.webos.service.wan/getContexts",
+        "com.webos.service.wan/getContext",
+        "com.webos.service.wan/setHostRoutes",
         "com.webos.service.wifi/cancel",
         "com.webos.service.wifi/cancelwps",
         "com.webos.service.wifi/changeNetwork",
@@ -45,6 +51,12 @@
         "com.webos.service.connectionmanager/setProxy",
         "com.webos.service.connectionmanager/setstate",
         "com.webos.service.connectionmanager/setTechnologyState",
+        "com.webos.service.wan/connect",
+        "com.webos.service.wan/disconnect",
+        "com.webos.service.wan/getStatus",
+        "com.webos.service.wan/getContexts",
+        "com.webos.service.wan/getContext",
+        "com.webos.service.wan/setHostRoutes",
         "com.webos.service.wifi/cancel",
         "com.webos.service.wifi/cancelwps",
         "com.webos.service.wifi/changeNetwork",
@@ -69,6 +81,10 @@
         "com.webos.service.connectionmanager/getUserStatus",
         "com.webos.service.connectionmanager/getwolwowlstatus",
         "com.webos.service.connectionmanager/monitorActivity",
-        "com.webos.service.wifi/getstatus"
+        "com.webos.service.wan/getStatus",
+        "com.webos.service.wan/getContexts",
+        "com.webos.service.wan/getContext",
+        "com.webos.service.wifi/getstatus",
+        "com.webos.service.wifi/getwifidiagnostics"
     ]
 }

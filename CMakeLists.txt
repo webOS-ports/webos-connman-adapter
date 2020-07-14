@@ -131,6 +131,7 @@ file(GLOB SOURCE_FILES
     src/wifi_service.c
     src/wifi_setting.c
     src/wifi_scan.c
+    src/wan_service.c
     src/pan_service.c
     src/state_recovery.c
     ${GDBUS_IF_DIR}/connman-interface.c

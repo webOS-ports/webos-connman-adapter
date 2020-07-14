@@ -59,6 +59,7 @@ errorText | Yes | String | Error description
 #include "wifi_profile.h"
 #include "utils.h"
 #include "pacrunner_client.h"
+#include "wan_service.h"
 #include "pan_service.h"
 #include "wifi_setting.h"
 
@@ -81,6 +82,8 @@ gboolean wifi_online_checking_status = FALSE;
 gboolean wired_connected = FALSE;
 gboolean wifi_connected = FALSE;
 gboolean p2p_connected = FALSE;
+gboolean cellular_powered = FALSE;
+gboolean wan_connected = FALSE;
 gboolean pan_connected = FALSE;
 guint block_getstatus_response = 0;
 gboolean old_wifi_tethering = FALSE;
@@ -528,6 +531,29 @@ static void append_connection_status(jvalue_ref *reply, bool subscribed,
 
 	if (with_new_interface)
 	{
+		jvalue_ref cellular_obj = jobject_create();
+		gboolean cellular_enabled = is_cellular_powered();
+
+		jobject_put(cellular_obj, J_CSTR_TO_JVAL("enabled"),
+		            jboolean_create(cellular_enabled));
+		jobject_put(*reply, J_CSTR_TO_JVAL("cellular"), cellular_obj);
+
+		jvalue_ref wan_obj = jobject_create();
+
+		if (cellular_enabled)
+		{
+			append_wan_status(wan_obj);
+		}
+		else
+		{
+			jvalue_ref connected_contexts_obj = jarray_create(NULL);
+			jobject_put(wan_obj, J_CSTR_TO_JVAL("connected"), jboolean_create(false));
+			jobject_put(wan_obj, J_CSTR_TO_JVAL("connectedContexts"),
+			            connected_contexts_obj);
+		}
+
+		jobject_put(*reply, J_CSTR_TO_JVAL("wan"), wan_obj);
+
 		jvalue_ref connected_pan_status = jobject_create();
 		jvalue_ref disconnected_pan_status = jobject_create();
 		jobject_put(disconnected_pan_status, J_CSTR_TO_JVAL("state"),
@@ -688,6 +714,12 @@ static gboolean check_update_is_needed(void)
 
 	p2p_connected = (connected_p2p_service != NULL && manager->groups != NULL);
 
+	if (cellular_powered != is_cellular_powered())
+	{
+		cellular_powered = is_cellular_powered();
+		needed = TRUE;
+	}
+
 	connman_service_t *connected_pan_service =
 	    connman_manager_get_connected_service(manager->bluetooth_services);
 
@@ -697,6 +729,36 @@ static gboolean check_update_is_needed(void)
 	}
 
 	pan_connected = (connected_pan_service != NULL);
+
+
+	GSList *iter;
+	guint num_connected = 0;
+
+	for (iter = manager->cellular_services; iter != NULL; iter = iter->next)
+	{
+		connman_service_t *service = iter->data;
+
+		if (!connman_service_is_connected(service))
+		{
+			continue;
+		}
+
+		num_connected++;
+
+		if (check_service_for_update(service, wan_connected || (num_connected > 0)))
+		{
+			needed = TRUE;
+		}
+	}
+
+	gboolean new_wan_connected = (num_connected > 0);
+
+	if (wan_connected != new_wan_connected)
+	{
+		needed = TRUE;
+	}
+
+	wan_connected = new_wan_connected;
 
 	WCALOG_INFO(MSGID_CONNECTION_INFO, 0, "needed: %d",needed);
 
@@ -779,7 +841,7 @@ void connectionmanager_send_status_to_subscribers(void)
 	jvalue_ref reply = jobject_create();
 	jvalue_ref reply_deprecated = jobject_create();
 	append_connection_status(&reply, true, true);
-	// Same but without mentioning PAN as we don't support it on the
+	// Same but without mentioning WAN and PAN as we don't support it on the
 	// com.webos.service.connectionmanager service face
 	append_connection_status(&reply_deprecated, true, false);
 
@@ -2094,6 +2156,11 @@ static void counter_usage_callback(const gchar *path, GVariant *home,
 	{
 		service = connman_manager_find_service_by_path(manager->wifi_services, path);
 
+		if (NULL == service)
+		{
+			service = connman_manager_find_service_by_path(manager->cellular_services,
+			          path);
+		}
 	}
 
 	if (NULL == service)
@@ -2168,6 +2235,10 @@ static void append_data_activity(jvalue_ref *reply)
 
 	jobject_put(*reply, J_CSTR_TO_JVAL("wired"), wired_stats);
 	jobject_put(*reply, J_CSTR_TO_JVAL("wifi"), wifi_stats);
+
+	jvalue_ref wan_stats = jobject_create();
+	append_interface_data_activity(&wan_stats, CONNMAN_SERVICE_TYPE_CELLULAR);
+	jobject_put(*reply, J_CSTR_TO_JVAL("wan"), wan_stats);
 
 	memcpy(counter_data_old, counter_data_new, sizeof(counter_data_old));
 	memset(counter_data_new, 0, sizeof(counter_data_new));

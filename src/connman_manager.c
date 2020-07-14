@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2019 LG Electronics, Inc.
+// Copyright (c) 2012-2018 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,6 +110,14 @@ static connman_service_t *find_service_from_path(connman_manager_t *manager,
 		}
 
 		service = connman_manager_find_service_by_path(manager->bluetooth_services,
+		                                               path);
+
+		if (NULL != service)
+		{
+			return service;
+		}
+
+		service = connman_manager_find_service_by_path(manager->cellular_services,
 		                                               path);
 	}
 
@@ -242,6 +250,14 @@ static gboolean service_on_configured_iface(GVariant *service_v)
 
 				return TRUE;
 			}
+			else if (!g_strcmp0(type, "cellular"))
+			{
+				g_variant_unref(properties);
+				g_variant_unref(property);
+				g_variant_unref(key_v);
+
+				return TRUE;
+			}
 			else if (!g_strcmp0(type, "bluetooth"))
 			{
 				g_variant_unref(properties);
@@ -294,6 +310,11 @@ static void add_service_to_list(connman_manager_t *manager,
 		{
 			manager->p2p_services = g_slist_append(manager->p2p_services, service);
 		}
+		else if (connman_service_type_wan(service))
+		{
+			manager->cellular_services = g_slist_append(manager->cellular_services,
+			                             service);
+		}
 		else if (connman_service_type_bluetooth(service))
 		{
 			manager->bluetooth_services = g_slist_append(manager->bluetooth_services,
@@ -331,7 +352,9 @@ static connman_service_t* update_or_add_service(connman_manager_t *manager,
 	{
 		/* Only in case that the service was added as new one it contains all
 		 * properties and we can check wether it's on one of the supported
-		 * network interfaces. */
+		 * network interfaces. If the service is a cellular one we ignore the
+		 * interface check as the interface is just way to route data and not
+		 * the primary control point. */
 		if (saved || service_on_configured_iface(service_v) == TRUE)
 		{
 			service = connman_service_new(service_v);
@@ -400,6 +423,10 @@ static gboolean connman_manager_update_services(connman_manager_t *manager,
 
 				case CONNMAN_SERVICE_TYPE_P2P:
 					*service_type |= P2P_SERVICES_CHANGED;
+					break;
+
+				case CONNMAN_SERVICE_TYPE_CELLULAR:
+					*service_type |= CELLULAR_SERVICES_CHANGED;
 					break;
 
 				case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -487,7 +514,7 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager,
 	}
 
 	gboolean wifi_services_removed = FALSE, wired_services_removed = FALSE,
-	         p2p_services_removed = FALSE,
+	         p2p_services_removed = FALSE, cellular_services_removed = FALSE,
 	         bluetooth_services_removed = FALSE;
 
 	wifi_services_removed = remove_services_from_list(&manager->wifi_services,
@@ -496,6 +523,8 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager,
 	                         services_removed);
 	p2p_services_removed = remove_services_from_list(&manager->p2p_services,
 	                       services_removed);
+	cellular_services_removed = remove_services_from_list(
+	                                &manager->cellular_services, services_removed);
 	bluetooth_services_removed = remove_services_from_list(
 	                                 &manager->bluetooth_services, services_removed);
 
@@ -522,13 +551,18 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager,
 		}
 	}
 
+	if (cellular_services_removed)
+	{
+		*service_type |= CELLULAR_SERVICES_CHANGED;
+	}
+
 	if (bluetooth_services_removed)
 	{
 		*service_type |= BLUETOOTH_SERVICES_CHANGED;
 	}
 
 	return (wifi_services_removed | wired_services_removed | p2p_services_removed |
-	        bluetooth_services_removed);
+	        cellular_services_removed | bluetooth_services_removed);
 }
 
 /**
@@ -556,6 +590,10 @@ static void connman_manager_free_services(connman_manager_t *manager)
 	g_slist_foreach(manager->p2p_services, (GFunc) connman_service_free, NULL);
 	g_slist_free(manager->p2p_services);
 	manager->p2p_services = NULL;
+
+	g_slist_foreach(manager->cellular_services, (GFunc) connman_service_free, NULL);
+	g_slist_free(manager->cellular_services);
+	manager->cellular_services = NULL;
 
 	g_slist_foreach(manager->bluetooth_services, (GFunc) connman_service_free,
 	                NULL);
@@ -1302,6 +1340,39 @@ connman_technology_t *connman_manager_find_ethernet_technology(
 }
 
 /**
+ * Go through the manager's technologies list and get the cellular one
+ * (see header for API details)
+ */
+
+connman_technology_t *connman_manager_find_cellular_technology(
+    connman_manager_t *manager)
+{
+	if (NULL == manager)
+	{
+		return NULL;
+	}
+
+	GSList *iter;
+
+	for (iter = manager->technologies; NULL != iter; iter = iter->next)
+	{
+		connman_technology_t *tech = (struct connman_technology *)(iter->data);
+
+		if (!tech)
+		{
+			continue;
+		}
+
+		if (g_strcmp0("cellular", tech->type) == 0)
+		{
+			return tech;
+		}
+	}
+
+	return NULL;
+}
+
+/**
  * Go through the manager's technologies list and get the bluetooth one
  * (see header for API details)
  */
@@ -1878,6 +1949,10 @@ connman_manager_t *connman_manager_new(void)
 
 	WCALOG_DEBUG("%d wifi services, %d technologies",
 	             g_slist_length(manager->wifi_services),
+	             g_slist_length(manager->technologies));
+
+	WCALOG_DEBUG("%d cellular services, %d technologies",
+	             g_slist_length(manager->cellular_services),
 	             g_slist_length(manager->technologies));
 
 	WCALOG_DEBUG("%d bluetooth services, %d technologies",

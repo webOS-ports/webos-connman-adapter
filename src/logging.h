@@ -63,8 +63,10 @@ extern PmLogContext gLogContext;
 /** common ones */
 #define MSGID_WIFI_SRVC_REGISTER_FAIL                   "WIFI_SRVC_REGISTER_FAIL"
 #define MSGID_CM_SRVC_REGISTER_FAIL                     "WIFI_CM_REGISTER_FAIL"
+#define MSGID_WAN_SRVC_REGISTER_FAIL                    "WAN_SRVC_REGISTER_FAIL"
 #define MSGID_PAN_SRVC_REGISTER_FAIL                    "PAN_SRVC_REGISTER_FAIL"
 
+#define MSGID_WAN_SRVC_ALLOC_FAIL                       "WAN_SRVC_ALLOC_FAIL"
 #define MSGID_INVALID_STATE                             "INVALID_STATE"
 
 /** main.c */
@@ -227,6 +229,11 @@ extern PmLogContext gLogContext;
 /** country_code.c */
 #define MSGID_COUNTRY_CODE_INFO                         "COUNTRY_CODE_INFO"
 #define MSGID_COUNTRY_CODE_FAILED                       "COUNTRY_CODE_FAILED"
+
+/** Wan info codes **/
+#define MSGID_WAN_CONNECT_INFO                          "WAN_CONNECT_INFO"
+#define MSGID_WAN_DISCONNECT_INFO                       "WAN_DISCONNECT_INFO"
+#define MSGID_WAN_SET_HOSTROUTE_ERROR                   "WAN_SET_HOSTROUTE_ERR"
 
 /** json_utils.c **/
 #define MSGID_JSON_KEY_NULL                             "JSON_KEY_NULL"
