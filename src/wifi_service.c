@@ -57,6 +57,7 @@ errorText | Yes | String | Error description
 #include "connectionmanager_service.h"
 #include "logging.h"
 #include "wifi_tethering_service.h"
+#include "pan_service.h"
 #include "errors.h"
 
 /* Range for converting signal strength to signal bars */
@@ -1805,6 +1806,10 @@ static void manager_services_changed_callback(gpointer data,
 		connectionmanager_send_status_to_subscribers();
 	}
 
+	if (service_type & BLUETOOTH_SERVICES_CHANGED)
+	{
+		connectionmanager_send_status_to_subscribers();
+	}
 }
 
 void send_getnetworks_status_to_subscribers()
@@ -2074,6 +2079,7 @@ static void check_and_initialize_wifi_technology(void)
 static void manager_technologies_changed_callback(gpointer data)
 {
 	check_and_initialize_wifi_technology();
+	check_and_initialize_bluetooth_technology();
 	check_and_initialize_ethernet_technology();
 }
 
@@ -3838,6 +3844,7 @@ static void connman_service_started(GDBusConnection *conn, const gchar *name,
 
 	check_and_initialize_wifi_technology();
 	check_and_initialize_ethernet_technology();
+	check_and_initialize_bluetooth_technology();
 
 	connectionmanager_send_status_to_subscribers();
 }

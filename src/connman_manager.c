@@ -104,6 +104,13 @@ static connman_service_t *find_service_from_path(connman_manager_t *manager,
 
 		service = connman_manager_find_service_by_path(manager->p2p_services, path);
 
+		if (NULL != service)
+		{
+			return service;
+		}
+
+		service = connman_manager_find_service_by_path(manager->bluetooth_services,
+		                                               path);
 	}
 
 	return service;
@@ -235,6 +242,15 @@ static gboolean service_on_configured_iface(GVariant *service_v)
 
 				return TRUE;
 			}
+			else if (!g_strcmp0(type, "bluetooth"))
+			{
+				g_variant_unref(properties);
+				g_variant_unref(property);
+				g_variant_unref(key_v);
+
+				return TRUE;
+			}
+
 		}
 
 		g_variant_unref(property);
@@ -277,6 +293,11 @@ static void add_service_to_list(connman_manager_t *manager,
 		else if (connman_service_type_p2p(service))
 		{
 			manager->p2p_services = g_slist_append(manager->p2p_services, service);
+		}
+		else if (connman_service_type_bluetooth(service))
+		{
+			manager->bluetooth_services = g_slist_append(manager->bluetooth_services,
+			                              service);
 		}
 	}
 }
@@ -381,6 +402,10 @@ static gboolean connman_manager_update_services(connman_manager_t *manager,
 					*service_type |= P2P_SERVICES_CHANGED;
 					break;
 
+				case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+					*service_type |= BLUETOOTH_SERVICES_CHANGED;
+					break;
+
 				default:
 					break;
 			}
@@ -462,7 +487,8 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager,
 	}
 
 	gboolean wifi_services_removed = FALSE, wired_services_removed = FALSE,
-	         p2p_services_removed = FALSE;
+	         p2p_services_removed = FALSE,
+	         bluetooth_services_removed = FALSE;
 
 	wifi_services_removed = remove_services_from_list(&manager->wifi_services,
 	                        services_removed);
@@ -470,6 +496,8 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager,
 	                         services_removed);
 	p2p_services_removed = remove_services_from_list(&manager->p2p_services,
 	                       services_removed);
+	bluetooth_services_removed = remove_services_from_list(
+	                                 &manager->bluetooth_services, services_removed);
 
 	if (wired_services_removed)
 	{
@@ -494,7 +522,13 @@ static gboolean connman_manager_remove_old_services(connman_manager_t *manager,
 		}
 	}
 
-	return (wifi_services_removed | wired_services_removed | p2p_services_removed);
+	if (bluetooth_services_removed)
+	{
+		*service_type |= BLUETOOTH_SERVICES_CHANGED;
+	}
+
+	return (wifi_services_removed | wired_services_removed | p2p_services_removed |
+	        bluetooth_services_removed);
 }
 
 /**
@@ -522,6 +556,11 @@ static void connman_manager_free_services(connman_manager_t *manager)
 	g_slist_foreach(manager->p2p_services, (GFunc) connman_service_free, NULL);
 	g_slist_free(manager->p2p_services);
 	manager->p2p_services = NULL;
+
+	g_slist_foreach(manager->bluetooth_services, (GFunc) connman_service_free,
+	                NULL);
+	g_slist_free(manager->bluetooth_services);
+	manager->bluetooth_services = NULL;
 
 	g_slist_foreach(manager->saved_services, (GFunc) connman_service_free, NULL);
 	g_slist_free(manager->saved_services);
@@ -1263,6 +1302,39 @@ connman_technology_t *connman_manager_find_ethernet_technology(
 }
 
 /**
+ * Go through the manager's technologies list and get the bluetooth one
+ * (see header for API details)
+ */
+
+connman_technology_t *connman_manager_find_bluetooth_technology(
+    connman_manager_t *manager)
+{
+	if (NULL == manager)
+	{
+		return NULL;
+	}
+
+	GSList *iter;
+
+	for (iter = manager->technologies; NULL != iter; iter = iter->next)
+	{
+		connman_technology_t *tech = (struct connman_technology *)(iter->data);
+
+		if (!tech)
+		{
+			continue;
+		}
+
+		if (g_strcmp0("bluetooth", tech->type) == 0)
+		{
+			return tech;
+		}
+	}
+
+	return NULL;
+}
+
+/**
  * Go through the manager's given services list and get the one which is in
  * "ready" or "online" state (see header for API details)
  */
@@ -1806,6 +1878,10 @@ connman_manager_t *connman_manager_new(void)
 
 	WCALOG_DEBUG("%d wifi services, %d technologies",
 	             g_slist_length(manager->wifi_services),
+	             g_slist_length(manager->technologies));
+
+	WCALOG_DEBUG("%d bluetooth services, %d technologies",
+	             g_slist_length(manager->bluetooth_services),
 	             g_slist_length(manager->technologies));
 
 	return manager;

@@ -35,6 +35,7 @@
 #include "logging.h"
 #include "wifi_service.h"
 #include "wifi_setting.h"
+#include "pan_service.h"
 #include "connectionmanager_service.h"
 
 static GMainLoop *mainloop = NULL;
@@ -57,7 +58,7 @@ term_handler(int signal)
 int
 main(int argc, char **argv)
 {
-	LSHandle *wifi_handle, *cm_handle;
+	LSHandle *wifi_handle, *cm_handle, *pan_handle;
 	signal(SIGTERM, term_handler);
 	signal(SIGINT, term_handler);
 
@@ -71,6 +72,13 @@ main(int argc, char **argv)
 	{
 		WCALOG_ERROR(MSGID_WIFI_SRVC_REGISTER_FAIL, 0,
 		             "Error in initializing com.webos.service.wifi service");
+		return -1;
+	}
+
+	if (initialize_pan_ls2_calls(mainloop, &pan_handle) < 0)
+	{
+		WCALOG_ERROR(MSGID_PAN_SRVC_REGISTER_FAIL, 0,
+		             "Error in initializing com.webos.serivce.pan service");
 		return -1;
 	}
 

@@ -8,5 +8,10 @@
         "settings",
         "devices",
         "networking.internal"
+    ],
+    "com.webos.service.pan": [
+        "settings",
+        "devices",
+        "networking.internal"
     ]
 }
