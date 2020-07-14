@@ -1,0 +1,12 @@
+[Unit]
+Description=webOS connman adaptation daemon
+Requires=ls-hubd.service connman.service
+After=ls-hubd.service connman.service
+
+[Service]
+Type=simple
+Restart=on-failure
+ExecStart=/usr/sbin/webos-connman-adapter
+
+[Install]
+WantedBy=multi-user.target
