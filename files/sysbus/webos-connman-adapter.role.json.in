@@ -1,36 +1,47 @@
 {
     "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-connman-adapter",
     "type":"regular",
-    "allowedNames":["com.webos.service.wifi", "com.webos.service.connectionmanager", "com.webos.service.wan", "com.webos.service.pan"],
+    "allowedNames":["com.palm.wifi", "com.webos.service.wifi", "com.palm.connectionmanager", "com.webos.service.connectionmanager", "com.palm.pan", "com.webos.service.pan", "com.palm.wan", "com.webos.service.wan"],
     "permissions": [
         {
+            "service":"com.palm.wifi",
+            "inbound":["*"],
+            "outbound":["*"]
+        },
+        {
             "service":"com.webos.service.wifi",
-            "outbound":["com.webos.service.pdm",
-                        "com.webos.settingsservice",
-                        "com.webos.service.wifi",
-                        "com.webos.service.config",
-                        "com.webos.service.connectionmanager"]
+            "inbound":["*"],
+            "outbound":["*"]
+        },
+        {
+            "service":"com.palm.connectionmanager",
+            "inbound":["*"],
+            "outbound":["*"]
         },
         {
             "service":"com.webos.service.connectionmanager",
-            "outbound":["com.webos.service.pdm",
-                        "com.webos.settingsservice",
-                        "com.webos.service.wifi",
-                        "com.webos.service.config"]
+            "inbound":["*"],
+            "outbound":["*"]
         },
         {
-            "service":"com.webos.service.wan",
-            "outbound":["com.webos.service.pdm",
-                        "com.webos.settingsservice",
-                        "com.webos.service.wifi",
-                        "com.webos.service.config"]
+            "service":"com.palm.pan",
+            "inbound":["*"],
+            "outbound":["*"]
         },
         {
             "service":"com.webos.service.pan",
-            "outbound":["com.webos.service.pdm",
-                        "com.webos.settingsservice",
-                        "com.webos.service.wifi",
-                        "com.webos.service.config"]
+            "inbound":["*"],
+            "outbound":["*"]
+        },
+        {
+            "service":"com.palm.wan",
+            "inbound":["*"],
+            "outbound":["*"]
+        },
+        {
+            "service":"com.webos.service.wan",
+            "inbound":["*"],
+            "outbound":["*"]
         }
     ]
 }
