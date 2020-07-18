@@ -152,6 +152,7 @@ target_link_libraries(webos-connman-adapter
 
 webos_build_daemon()
 webos_build_system_bus_files()
+webos_build_pkgconfig(files/pkgconfig/webos-connman-adapter)
 
 webos_config_build_doxygen(doc Doxyfile)
 
