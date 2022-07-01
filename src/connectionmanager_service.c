@@ -58,7 +58,7 @@ errorText | Yes | String | Error description
 #include "lunaservice_utils.h"
 #include "logging.h"
 
-static LSHandle *pLsHandle, *pLsPublicHandle;
+static LSHandle *pLsHandle;
 
 /**
  * @brief Fill in information about the system's connection status
@@ -965,12 +965,6 @@ static LSMethod connectionmanager_methods[] = {
     { },
 };
 
-static LSMethod connectionmanager_public_methods[] = {
-    { LUNA_METHOD_GETSTATUS,            handle_get_status_command },
-    { LUNA_METHOD_GETSTATUS2,            handle_get_status_command },
-    { },
-};
-
 static gboolean check_cellular_status_cb(gpointer user_data)
 {
 	connman_technology_t *technology = connman_manager_find_cellular_technology(manager);
@@ -988,20 +982,13 @@ int initialize_connectionmanager_ls2_calls( GMainLoop *mainloop )
 	LSError lserror;
 	LSErrorInit (&lserror);
 	pLsHandle       = NULL;
-	pLsPublicHandle = NULL;
 
 	if(NULL == mainloop)
 		goto Exit;
 
-	if (LSRegisterPubPriv(CONNECTIONMANAGER_LUNA_SERVICE_NAME, &pLsHandle, false, &lserror) == false)
+	if (LSRegister(CONNECTIONMANAGER_LUNA_SERVICE_NAME, &pLsHandle, &lserror) == false)
 	{
-		WCA_LOG_FATAL("LSRegister() private returned error");
-		goto Exit;
-	}
-
-	if (LSRegisterPubPriv(CONNECTIONMANAGER_LUNA_SERVICE_NAME, &pLsPublicHandle, true, &lserror) == false)
-	{
-		WCA_LOG_FATAL("LSRegister() public returned error");
+		WCA_LOG_FATAL("LSRegister() returned error");
 		goto Exit;
 	}
 
@@ -1011,21 +998,9 @@ int initialize_connectionmanager_ls2_calls( GMainLoop *mainloop )
 		goto Exit;
 	}
 
-	if (LSRegisterCategory(pLsPublicHandle, NULL, connectionmanager_public_methods, NULL, NULL, &lserror) == false)
-	{
-		WCA_LOG_FATAL("LSRegisterCategory() returned error");
-		goto Exit;
-	}
-
 	if (LSGmainAttach(pLsHandle, mainloop, &lserror) == false)
 	{
-		WCA_LOG_FATAL("LSGmainAttach() private returned error");
-		goto Exit;
-	}
-
-	if (LSGmainAttach(pLsPublicHandle, mainloop, &lserror) == false)
-	{
-		WCA_LOG_FATAL("LSGmainAttach() public returned error");
+		WCA_LOG_FATAL("LSGmainAttach() returned error");
 		goto Exit;
 	}
 
@@ -1065,14 +1040,5 @@ Exit:
 		}
 	}
 
-        if (pLsPublicHandle)
-        {
-		LSErrorInit (&lserror);
-		if(LSUnregister(pLsPublicHandle, &lserror) == false)
-		{
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-		}
-        }
 	return -1;
 }

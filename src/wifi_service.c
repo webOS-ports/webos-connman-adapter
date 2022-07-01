@@ -83,7 +83,7 @@ typedef struct connection_settings {
 /* Schedule a scan every 15 seconds */
 #define WIFI_DEFAULT_SCAN_TIMEOUT	15000
 
-static LSHandle *pLsHandle, *pLsPublicHandle;
+static LSHandle *pLsHandle;
 
 connman_manager_t *manager = NULL;
 static connman_agent_t *agent = NULL;
@@ -1832,20 +1832,13 @@ int initialize_wifi_ls2_calls( GMainLoop *mainloop )
 	LSError lserror;
 	LSErrorInit (&lserror);
 	pLsHandle       = NULL;
-	pLsPublicHandle = NULL;
 
 	if(NULL == mainloop)
 		goto Exit;
 
-	if (LSRegisterPubPriv(WIFI_LUNA_SERVICE_NAME, &pLsHandle, false, &lserror) == false)
+	if (LSRegister(WIFI_LUNA_SERVICE_NAME, &pLsHandle, &lserror) == false)
 	{
-		WCA_LOG_FATAL("LSRegister() private returned error");
-		goto Exit;
-	}
-
-	if (LSRegisterPubPriv(WIFI_LUNA_SERVICE_NAME, &pLsPublicHandle, true, &lserror) == false)
-	{
-		WCA_LOG_FATAL("LSRegister() public returned error");
+		WCA_LOG_FATAL("LSRegister() returned error");
 		goto Exit;
 	}
 
@@ -1857,13 +1850,7 @@ int initialize_wifi_ls2_calls( GMainLoop *mainloop )
 
 	if (LSGmainAttach(pLsHandle, mainloop, &lserror) == false)
 	{
-		WCA_LOG_FATAL("LSGmainAttach() private returned error");
-		goto Exit;
-	}
-
-	if (LSGmainAttach(pLsPublicHandle, mainloop, &lserror) == false)
-	{
-		WCA_LOG_FATAL("LSGmainAttach() public returned error");
+		WCA_LOG_FATAL("LSGmainAttach() returned error");
 		goto Exit;
 	}
 
@@ -1891,14 +1878,5 @@ Exit:
 		}
 	}
 
-        if (pLsPublicHandle)
-        {
-		LSErrorInit (&lserror);
-		if(LSUnregister(pLsPublicHandle, &lserror) == false)
-		{
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-		}
-        }
 	return -1;
 }
