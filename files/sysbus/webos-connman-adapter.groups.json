@@ -1,8 +1,9 @@
 {
-    "allowedNames": ["com.webos.service.wifi", "com.webos.service.connectionmanager"],
+    "allowedNames": ["com.webos.service.wifi", "com.webos.service.connectionmanager", "com.webos.service.wan"],
           "networkconnection.query": ["dev"],
           "networkconnection.management": ["oem"],
           "wifi.query": ["dev"],
-          "wifi.management": ["oem"]
+          "wifi.management": ["oem"],
+          "networking.query": ["dev"]
 }
 

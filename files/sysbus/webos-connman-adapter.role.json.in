@@ -1,23 +1,41 @@
 {
     "exeName":"@WEBOS_INSTALL_SBINDIR@/webos-connman-adapter",
-    "type":"regular",
+     "type":"regular",
     "trustLevel": "oem",
-    "allowedNames":["com.webos.service.wifi", "com.webos.service.connectionmanager"],
+    "allowedNames":["com.webos.service.wifi", "com.webos.service.connectionmanager", "com.webos.service.wan"],
     "permissions": [
         {
             "service":"com.webos.service.wifi",
-            "outbound":["com.webos.service.pdm",
-                        "com.webos.settingsservice",
-                        "com.webos.service.wifi",
+            "outbound":["com.webos.service.activitymanager.client",
                         "com.webos.service.config",
-                        "com.webos.service.connectionmanager"]
+                        "com.webos.service.connectionmanager",
+                        "com.webos.service.eventmonitor",
+                        "com.webos.service.pdm",
+                        "com.webos.service.systemservice",
+                        "com.webos.service.wifi",
+                        "com.webos.settingsservice"]
         },
         {
             "service":"com.webos.service.connectionmanager",
-            "outbound":["com.webos.service.pdm",
-                        "com.webos.settingsservice",
+            "outbound":["com.webos.service.activitymanager.client",
+                        "com.webos.service.config",
+                        "com.webos.service.connectionmanager",
+                        "com.webos.service.eventmonitor",
+                        "com.webos.service.pdm",
+                        "com.webos.service.systemservice",
                         "com.webos.service.wifi",
-                        "com.webos.service.config"]
+                        "com.webos.settingsservice"]
+        },
+        {
+            "service":"com.webos.service.wan",
+            "outbound":["com.webos.service.activitymanager.client",
+                        "com.webos.service.config",
+                        "com.webos.service.connectionmanager",
+                        "com.webos.service.eventmonitor",
+                        "com.webos.service.pdm",
+                        "com.webos.service.systemservice",
+                        "com.webos.service.wifi",
+                        "com.webos.settingsservice"]
         }
     ]
 }

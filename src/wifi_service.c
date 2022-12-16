@@ -58,6 +58,7 @@ errorText | Yes | String | Error description
 #include "logging.h"
 #include "wifi_p2p_service.h"
 #include "wifi_tethering_service.h"
+#include "wan_service.h"
 #include "errors.h"
 
 /* Range for converting signal strength to signal bars */
@@ -1849,6 +1850,12 @@ static void manager_services_changed_callback(gpointer data,
 		connectionmanager_send_status_to_subscribers();
 	}
 
+	if (service_type & CELLULAR_SERVICES_CHANGED)
+	{
+		connectionmanager_send_status_to_subscribers();
+		send_wan_connection_status_to_subscribers();
+		send_wan_contexts_update_to_subscribers();
+	}
 }
 
 void send_getnetworks_status_to_subscribers()
@@ -2145,6 +2152,7 @@ static void manager_technologies_changed_callback(gpointer data)
 {
 	check_and_initialize_wifi_technology();
 	check_and_initialize_p2p_technology();
+	check_and_initialize_cellular_technology();
 	check_and_initialize_ethernet_technology();
 }
 
@@ -4059,6 +4067,7 @@ static void connman_service_started(GDBusConnection *conn, const gchar *name,
 	check_and_initialize_wifi_technology();
 	check_and_initialize_p2p_technology();
 	check_and_initialize_ethernet_technology();
+	check_and_initialize_cellular_technology();
 
 	connectionmanager_send_status_to_subscribers();
 }

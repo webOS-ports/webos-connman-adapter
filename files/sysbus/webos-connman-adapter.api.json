@@ -64,6 +64,26 @@
         "com.webos.service.wifi/p2p/setstate",
         "com.webos.service.wifi/p2p/settethering",
         "com.webos.service.wifi/p2p/setwifidisplayinfo"
-
+    ],
+    "networking.query": [
+        "com.webos.service.connectionmanager/checkinternetstatus",
+        "com.webos.service.connectionmanager/findProxyForURL",
+        "com.webos.service.connectionmanager/getinfo",
+        "com.webos.service.connectionmanager/getStatus",
+        "com.webos.service.connectionmanager/getstatus",
+        "com.webos.service.connectionmanager/getUserStatus",
+        "com.webos.service.connectionmanager/getwolwowlstatus",
+        "com.webos.service.connectionmanager/monitorActivity",
+        "com.webos.service.wan/getStatus",
+        "com.webos.service.wan/getContexts",
+        "com.webos.service.wan/getContext",
+        "com.webos.service.wan/connect",
+        "com.webos.service.wan/disconnect",
+        "com.webos.service.wan/getStatus",
+        "com.webos.service.wan/getContexts",
+        "com.webos.service.wan/getContext",
+        "com.webos.service.wan/setHostRoutes",
+        "com.webos.service.wifi/getstatus",
+        "com.webos.service.wifi/getwifidiagnostics"
     ]
 }

@@ -35,6 +35,7 @@
 #include "logging.h"
 #include "wifi_service.h"
 #include "wifi_setting.h"
+#include "wan_service.h"
 #include "connectionmanager_service.h"
 
 static GMainLoop *mainloop = NULL;
@@ -57,7 +58,7 @@ term_handler(int signal)
 int
 main(int argc, char **argv)
 {
-	LSHandle *wifi_handle, *cm_handle;
+	LSHandle *wifi_handle, *wan_handle, *cm_handle;
 	signal(SIGTERM, term_handler);
 	signal(SIGINT, term_handler);
 
@@ -74,6 +75,13 @@ main(int argc, char **argv)
 		return -1;
 	}
 
+	if (initialize_wan_ls2_calls(mainloop, &wan_handle) < 0)
+	{
+		WCALOG_ERROR(MSGID_WAN_SRVC_REGISTER_FAIL, 0,
+		             "Error in initializing com.webos.service.wan service");
+		return -1;
+	}
+
 	if (initialize_connectionmanager_ls2_calls(mainloop, &cm_handle) < 0)
 	{
 		WCALOG_ERROR(MSGID_CM_SRVC_REGISTER_FAIL, 0,
@@ -83,7 +91,7 @@ main(int argc, char **argv)
 
 	wca_support_connman_update_callbacks wca_support_library_cb = { 0 };
 
-	if (wca_support_init(wifi_handle, cm_handle,
+	if (wca_support_init(wifi_handle, cm_handle, wan_handle,
 	                     &wca_support_library_cb, NULL, &gLogContext) < 0)
 	{
 		WCALOG_ERROR(MSGID_WCA_SUPPORT_FAIL, 0,

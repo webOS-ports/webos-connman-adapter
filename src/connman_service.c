@@ -66,6 +66,45 @@ gboolean connman_service_type_p2p(connman_service_t *service)
 }
 
 /**
+
+* Check if the type of the service is wan (see header for API details)
+*/
+
+gboolean connman_service_type_wan(connman_service_t *service)
+{
+	return (NULL != service) && (service->type == CONNMAN_SERVICE_TYPE_CELLULAR);
+}
+
+/**
+ * @brief Gets hostroutes for the connman service
+ */
+
+gboolean connman_service_set_hostroutes(connman_service_t *service,
+                                        GStrv hostroutes)
+{
+	if (NULL == service || NULL == hostroutes)
+	{
+		return FALSE;
+	}
+
+	GError *error = NULL;
+
+	connman_interface_service_call_set_property_sync(service->remote,
+	        "HostRoutes.Configuration",
+	        g_variant_new_variant(g_variant_new_strv((const gchar * const *)hostroutes,
+	                              g_strv_length(hostroutes))), NULL, &error);
+
+	if (error)
+	{
+		WCALOG_ESCAPED_ERRMSG(MSGID_WAN_SET_HOSTROUTE_ERROR, error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/**
  * Map the service connection status to corresponding webos state
  * (see header for API details)
  */
@@ -899,6 +938,18 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 			g_variant_unref(va);
 		}
 
+		if (!g_strcmp0(key, "HostRoutes"))
+		{
+			GVariant *v = g_variant_get_child_value(property, 1);
+			GVariant *va = g_variant_get_child_value(v, 0);
+
+			g_strfreev(service->hostroutes);
+			service->hostroutes = g_variant_dup_strv(va, NULL);
+
+			g_variant_unref(v);
+			g_variant_unref(va);
+		}
+
 		g_variant_unref(property);
 		g_variant_unref(key_v);
 	}
@@ -1608,6 +1659,23 @@ void connman_service_update_properties(connman_service_t *service,
 		{
 			const gchar *v = g_variant_get_string(val, NULL);
 			connman_service_update_type(service,v);
+
+			if (!g_strcmp0(v, "wifi"))
+			{
+				service->type = CONNMAN_SERVICE_TYPE_WIFI;
+			}
+			else if (!g_strcmp0(v, "ethernet"))
+			{
+				service->type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			}
+			else if (!g_strcmp0(v, "Peer"))
+			{
+				service->type = CONNMAN_SERVICE_TYPE_P2P;
+			}
+			else if (!g_strcmp0(v, "cellular"))
+			{
+				service->type = CONNMAN_SERVICE_TYPE_CELLULAR;
+			}
 		}
 		else if (!g_strcmp0(key, "State"))
 		{
@@ -2037,6 +2105,9 @@ void connman_service_free(gpointer data, gpointer user_data)
 	g_strfreev(service->proxyinfo.servers);
 	g_strfreev(service->proxyinfo.excludes);
 
+
+	g_strfreev(service->hostroutes);
+	service->hostroutes = NULL;
 
 	g_free(service->peer.address);
 	g_free(service->peer.service_discovery_response);

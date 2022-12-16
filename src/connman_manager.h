@@ -42,6 +42,8 @@ typedef enum
 	CONNMAN_SERVICE_TYPE_P2P_WiFiDisplayIEs
 } connman_p2p_service_type;
 
+#define CELLULAR_SERVICES_CHANGED   8
+
 /**
  * Callback function for handling any changes in connman services
  *
@@ -70,6 +72,7 @@ typedef struct connman_manager
 	GSList  *wifi_services;
 	GSList  *wired_services;
 	GSList  *p2p_services;
+	GSList  *cellular_services;
 	GSList  *saved_services;
 	GSList  *technologies;
 	GSList  *groups;
@@ -167,6 +170,15 @@ extern connman_technology_t *connman_manager_find_ethernet_technology(
  * @return Technology with type "p2p"
  */
 extern connman_technology_t *connman_manager_find_p2p_technology(
+    connman_manager_t *manager);
+/**
+* Go through the manager's technologies list and get the technology with type "cellular"
+*
+* @param[IN]  manager A manager instance
+*
+* @return Technology with type "cellular"
+*/
+extern connman_technology_t *connman_manager_find_cellular_technology(
     connman_manager_t *manager);
 /**
  * Go through the manager's given services list and get the one which is in "ready" or

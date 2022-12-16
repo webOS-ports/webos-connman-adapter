@@ -14,5 +14,13 @@
         "wifi.query",
         "wifi.management",
         "systemconfig.query"
+    ],
+    "com.webos.service.wan": [
+        "settings.query",
+        "networkconnection.query",
+        "networkconnection.management",
+        "wifi.query",
+        "wifi.management",
+        "systemconfig.query"
     ]
 }
