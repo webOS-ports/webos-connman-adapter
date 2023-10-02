@@ -10,10 +10,15 @@
                         "com.webos.service.config",
                         "com.webos.service.connectionmanager",
                         "com.webos.service.eventmonitor",
+                        "com.webos.service.location",
                         "com.webos.service.pdm",
                         "com.webos.service.systemservice",
                         "com.webos.service.wifi",
-                        "com.webos.settingsservice"]
+                        "com.webos.settingsservice",
+                        "com.webos.service.downloadmanager",
+                        "com.webos.lunasend-*",
+                        "com.webos.surfacemanager-*",
+                        "org.webosports.service.update"]
         },
         {
             "service":"com.webos.service.connectionmanager",
@@ -21,10 +26,15 @@
                         "com.webos.service.config",
                         "com.webos.service.connectionmanager",
                         "com.webos.service.eventmonitor",
+                        "com.webos.service.location",
                         "com.webos.service.pdm",
                         "com.webos.service.systemservice",
                         "com.webos.service.wifi",
-                        "com.webos.settingsservice"]
+                        "com.webos.settingsservice",
+                        "com.webos.service.downloadmanager",
+                        "com.webos.lunasend-*",
+                        "com.webos.surfacemanager-*",
+                        "org.webosports.service.update"]
         },
         {
             "service":"com.webos.service.wan",
@@ -32,10 +42,15 @@
                         "com.webos.service.config",
                         "com.webos.service.connectionmanager",
                         "com.webos.service.eventmonitor",
+                        "com.webos.service.location",
                         "com.webos.service.pdm",
                         "com.webos.service.systemservice",
                         "com.webos.service.wifi",
-                        "com.webos.settingsservice"]
+                        "com.webos.settingsservice",
+                        "com.webos.service.downloadmanager",
+                        "com.webos.lunasend-*",
+                        "com.webos.surfacemanager-*",
+                        "org.webosports.service.update"]
         }
     ]
 }
