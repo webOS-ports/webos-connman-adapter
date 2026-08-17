@@ -60,6 +60,8 @@ static void retrieve_wan_context(jvalue_ref context_obj,
 	            jboolean_create(connman_service_is_connected(service)));
 	jobject_put(context_obj, J_CSTR_TO_JVAL("onInternet"),
 	            jboolean_create(connman_service_is_online(service)));
+	jobject_put(context_obj, J_CSTR_TO_JVAL("roaming"),
+	            jboolean_create(service->roaming));
 
 	if (service->ipinfo.iface)
 	{

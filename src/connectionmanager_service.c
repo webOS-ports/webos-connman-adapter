@@ -193,7 +193,27 @@ static void update_connection_status(connman_service_t *connected_service,
 			            jstring_create(connected_service->ipinfo.dns[i]));
 		}
 
+		if (connected_service->ipinfo.domains &&
+		        g_strv_length(connected_service->ipinfo.domains) > 0)
+		{
+			jvalue_ref domains_obj = jarray_create(NULL);
+
+			for (i = 0; i < g_strv_length(connected_service->ipinfo.domains); i++)
+			{
+				jarray_append(domains_obj,
+				              jstring_create(connected_service->ipinfo.domains[i]));
+			}
+
+			jobject_put(*status, J_CSTR_TO_JVAL("domains"), domains_obj);
+		}
+
 		update_string_value(status, J_CSTR_TO_JVAL("method"),connected_service->ipinfo.ipv4.method);
+
+		if (connected_service->type == CONNMAN_SERVICE_TYPE_CELLULAR)
+		{
+			jobject_put(*status, J_CSTR_TO_JVAL("roaming"),
+			            jboolean_create(connected_service->roaming));
+		}
 
 		if (connman_service_type_wifi(connected_service))
 		{
@@ -1504,14 +1524,16 @@ static bool handle_set_dns_command(LSHandle *sh, LSMessage *message,
 	// To prevent memory leaks, schema should be checked before the variables will be initialized.
 	jvalue_ref parsedObj = {0};
 	if (!LSMessageValidateSchema(sh, message,
-	                             j_cstr_to_buffer(STRICT_SCHEMA(PROPS_3(ARRAY(dns, string), PROP(ssid,
+	                             j_cstr_to_buffer(STRICT_SCHEMA(PROPS_4(ARRAY(dns, string),
+	                                     ARRAY(domains, string), PROP(ssid,
 	                                     string), PROP(interfaceName, string)) REQUIRED_1(dns))), &parsedObj))
 	{
 		return true;
 	}
 
-	jvalue_ref dnsObj = {0};
+	jvalue_ref dnsObj = {0}, domainsObj = {0};
 	GStrv dns = NULL;
+	GStrv domains = NULL;
 	gchar *ssid = NULL;
 	connman_service_t *service = NULL;
 	gchar *interface_name = NULL;
@@ -1536,6 +1558,30 @@ static bool handle_set_dns_command(LSHandle *sh, LSMessage *message,
 		dns[dns_arrsize] = NULL;
 	}
 
+	/*
+	 * Optional DNS search domains. Connman keeps these separate from the
+	 * nameserver list, in Domains.Configuration.
+	 */
+	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("domains"), &domainsObj))
+	{
+		int i, domains_arrsize = jarray_size(domainsObj);
+		domains = (GStrv) g_new0(GStrv, domains_arrsize + 1);
+
+		for (i = 0; i < domains_arrsize; i++)
+		{
+			raw_buffer domain_buf = jstring_get(jarray_get(domainsObj, i));
+			domains[i] = g_strdup(domain_buf.m_str);
+			jstring_free_buffer(domain_buf);
+
+			if (0 == strlen(domains[i]))
+			{
+				goto invalid_params;
+			}
+		}
+
+		domains[domains_arrsize] = NULL;
+	}
+
 	get_string_value(parsedObj,J_CSTR_TO_BUF("ssid"),&ssid);
 	get_string_value(parsedObj,J_CSTR_TO_BUF("interfaceName"),&interface_name);
 
@@ -1544,7 +1590,8 @@ static bool handle_set_dns_command(LSHandle *sh, LSMessage *message,
 
 	if (NULL != service)
 	{
-		if (connman_service_set_nameservers(service, dns))
+		if (connman_service_set_nameservers(service, dns) &&
+		        (NULL == domains || connman_service_set_domains(service, domains)))
 		{
 			LSMessageReplySuccess(sh, message);
 		}
@@ -1589,6 +1636,7 @@ invalid_params:
 	LSMessageReplyErrorInvalidParams(sh, message);
 exit:
 	g_strfreev(dns);
+	g_strfreev(domains);
 	g_free(ssid);
 	g_free(interface_name);
 	j_release(&parsedObj);

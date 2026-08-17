@@ -66,6 +66,7 @@ typedef struct ipinfo
 	gchar *iface;
 	ipv4info_t ipv4;
 	GStrv dns;
+	GStrv domains; /* DNS search domains */
 	ipv6info_t ipv6;
 } ipinfo_t;
 
@@ -140,6 +141,7 @@ typedef struct connman_service
 	gboolean disconnecting;
 	gboolean immutable;
 	gboolean favorite;
+	gboolean roaming; /* Cellular service is on a roaming network */
 	gboolean hidden;
 	gboolean online;
 	gboolean online_checking;
@@ -375,6 +377,17 @@ extern gboolean connman_service_set_proxy(connman_service_t *service,
  */
 extern gboolean connman_service_set_nameservers(connman_service_t *service,
         GStrv dns);
+
+/**
+ * Set the DNS search domains for a service
+ *
+ * @param[IN]  service A service instance
+ * @param[IN]  domains A NULL terminated array of search domains
+ *
+ * @return FALSE if the call to set "Domains.Configuration" property failed, TRUE otherwise
+ */
+extern gboolean connman_service_set_domains(connman_service_t *service,
+        GStrv domains);
 
 /**
  * Set the "autoconnect" flag for a service
