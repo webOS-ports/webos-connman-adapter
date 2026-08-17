@@ -358,19 +358,26 @@ static void send_sta_count(jvalue_ref *reply)
 	if(NULL == reply)
 		return;
 
-	unsigned int sta_count = connman_manager_get_sta_count(manager);
+	/*
+	 * Connman's tethering client list is fed from the supplicant's
+	 * StaAuthorized/StaDeauthorized events, so it is both the station count
+	 * and the list of station MACs.
+	 */
+	GStrv stations = connman_manager_get_tethering_clients(manager);
+	guint sta_count = stations ? g_strv_length(stations) : 0;
+
 	jobject_put(*reply, J_CSTR_TO_JVAL("stationCount"), jnumber_create_i32(sta_count));
 
 	jvalue_ref connected_stations_obj = jarray_create(NULL);
 
-	connman_technology_t *wifi_tech = connman_manager_find_wifi_technology(manager);
-
-	for (int i = 0; i < g_strv_length(wifi_tech->station_mac); i++)
+	for (guint i = 0; i < sta_count; i++)
 	{
-		jarray_append(connected_stations_obj, jstring_create(wifi_tech->station_mac[i]));
+		jarray_append(connected_stations_obj, jstring_create(stations[i]));
 	}
 
 	jobject_put(*reply, J_CSTR_TO_JVAL("connectedStations"), connected_stations_obj);
+
+	g_strfreev(stations);
 }
 
 void send_sta_count_to_subscribers(void)

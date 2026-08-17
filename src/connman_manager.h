@@ -316,6 +316,16 @@ extern connman_group_t *connman_manager_create_group(connman_manager_t *manager,
 extern guint connman_manager_get_sta_count(connman_manager_t *manager);
 
 /**
+ * @brief Retrieve the MAC addresses of the stations currently associated with
+ *        the tethering AP. Caller owns the result and must g_strfreev() it.
+ *
+ * @param[IN] manager A manager instance
+ *
+ * @return A NULL terminated array of MAC addresses, NULL on failure
+ */
+extern GStrv connman_manager_get_tethering_clients(connman_manager_t *manager);
+
+/**
  * Populate the group's peer_list field with all of the group's peers
  *
  * @param [IN] manager A manager instance

@@ -2044,14 +2044,12 @@ static void technology_property_changed_callback(gpointer data,
 			send_tethering_state_to_subscribers();
 		}
 
-		if(g_strcmp0(property, "StationMac") == 0) {
-			GVariant *va = g_variant_get_child_value(value, 0);
-			g_strfreev(technology->station_mac);
-			technology->station_mac = g_variant_dup_strv(va, NULL);
-
-			g_variant_unref(va);
-			send_sta_count_to_subscribers();
-		}
+		/*
+		 * The station list used to arrive as a "StationMac" property on the
+		 * wifi technology; upstream connman reports it through the manager's
+		 * TetheringClientsChanged signal instead, which connman_manager.c
+		 * hooks up.
+		 */
 	}
 	else if (technology == connman_manager_find_ethernet_technology(manager))
 	{

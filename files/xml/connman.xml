@@ -71,8 +71,8 @@ limitations under the License.
 			<arg type="s" direction="in"/>
 			<arg type="o" direction="out"/>
 		</method>
-		<method name="GetStaCount">
-			<arg type="i" direction="out"/>
+		<method name="GetTetheringClients">
+			<arg type="as" direction="out"/>
 		</method>
 		<method name="RegisterPeerService">
 			<arg name="specification" type="a{sv}" direction="in"/>
@@ -110,6 +110,10 @@ limitations under the License.
 		</signal>
 		<signal name="GroupRemoved">
 			<arg type="o"/>
+		</signal>
+		<signal name="TetheringClientsChanged">
+			<arg type="as"/>
+			<arg type="as"/>
 		</signal>
 	</interface>
 	<interface name="net.connman.Technology">

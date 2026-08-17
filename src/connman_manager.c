@@ -24,6 +24,7 @@
 #include "connman_manager.h"
 #include "logging.h"
 #include "connectionmanager_service.h"
+#include "wifi_tethering_service.h"
 #include "utils.h"
 #include "wfdsie/wfdinfoelemwrapper.h"
 
@@ -1200,18 +1201,41 @@ guint connman_manager_get_sta_count(connman_manager_t *manager)
 	if (NULL == manager)
 		return FALSE;
 
-	GError *error = NULL;
-	guint sta_count = 0;
+	gchar **clients = connman_manager_get_tethering_clients(manager);
+	guint sta_count = clients ? g_strv_length(clients) : 0;
 
-	connman_interface_manager_call_get_sta_count_sync(manager->remote, &sta_count, NULL, &error);
+	g_strfreev(clients);
+
+	return sta_count;
+}
+
+/**
+ * Retrieve the MAC addresses of the stations currently associated with our
+ * tethering AP (see header for API details)
+ */
+
+GStrv connman_manager_get_tethering_clients(connman_manager_t *manager)
+{
+	GError *error = NULL;
+	gchar **clients = NULL;
+
+	if (NULL == manager)
+	{
+		return NULL;
+	}
+
+	connman_interface_manager_call_get_tethering_clients_sync(manager->remote,
+	        &clients, NULL, &error);
 
 	if (error)
 	{
+		WCALOG_ESCAPED_ERRMSG(MSGID_MANAGER_GET_TETHERING_CLIENTS_ERROR,
+		                      error->message);
 		g_error_free(error);
-		return 0;
+		return NULL;
 	}
 
-	return sta_count;
+	return clients;
 }
 
 /**
@@ -2068,6 +2092,22 @@ saved_services_changed_cb(ConnmanInterfaceManager *proxy,
 }
 
 /**
+ * Callback for manager's "tethering_clients_changed" signal
+ *
+ * Connman emits this whenever a station associates with or leaves our
+ * tethering AP, which is what /tethering/getStationCount reports.
+ */
+static void
+tethering_clients_changed_cb(ConnmanInterfaceManager *proxy,
+                             gchar **clients_added, gchar **clients_removed,
+                             connman_manager_t *manager)
+{
+	WCALOG_DEBUG("Tethering clients changed");
+
+	send_sta_count_to_subscribers();
+}
+
+/**
  * Register for manager's "properties_changed" signal, calling the provided function whenever the callback function
  * for the signal is called (see header for API details)
  */
@@ -2294,6 +2334,9 @@ connman_manager_t *connman_manager_new(void)
 
 	g_signal_connect(G_OBJECT(manager->remote), "saved-services-changed",
 	                 G_CALLBACK(saved_services_changed_cb), manager);
+
+	g_signal_connect(G_OBJECT(manager->remote), "tethering-clients-changed",
+	                 G_CALLBACK(tethering_clients_changed_cb), manager);
 
 	g_signal_connect(G_OBJECT(manager->remote), "group-added",
 	                 G_CALLBACK(group_added_cb), manager);
