@@ -655,6 +655,16 @@ static gboolean handle_failed_connection_request(gpointer user_data)
 		error_message = "Out of range";
 		error_code = WCA_API_ERROR_OUT_OF_RANGE;
 	}
+	else if (g_strcmp0(service->error, "blocked") == 0)
+	{
+		error_message = "Access point refused the connection";
+		error_code = WCA_API_ERROR_BLOCKED;
+	}
+	else if (g_strcmp0(service->error, "online-check-failed") == 0)
+	{
+		error_message = "Connected but the network has no internet access";
+		error_code = WCA_API_ERROR_ONLINE_CHECK_FAILED;
+	}
 
 	LSMessageReplyCustomError(current_connect_req->handle,
 	                          current_connect_req->message,

@@ -113,6 +113,43 @@ static gboolean request_peer_authorization_cb(
 	return TRUE;
 }
 
+/*
+ * Connman calls Cancel when a request it made through RequestInput or
+ * RequestPeerAuthorization is no longer needed, for instance because the
+ * service was disconnected or the input timed out. Our request handlers reply
+ * synchronously so there is nothing in flight to abort, but the method still
+ * has to exist or every cancellation answers with UnknownMethod.
+ */
+static gboolean cancel_cb(ConnmanInterfaceAgent *interface,
+                          GDBusMethodInvocation *invocation,
+                          gpointer user_data)
+{
+	connman_agent_t *agent = user_data;
+
+	WCALOG_DEBUG("Agent request cancelled by connman");
+
+	connman_interface_agent_complete_cancel(agent->interface, invocation);
+
+	return TRUE;
+}
+
+/*
+ * Release is called when connman drops the agent registration, e.g. when it
+ * is shutting down.
+ */
+static gboolean release_cb(ConnmanInterfaceAgent *interface,
+                           GDBusMethodInvocation *invocation,
+                           gpointer user_data)
+{
+	connman_agent_t *agent = user_data;
+
+	WCALOG_DEBUG("Agent released by connman");
+
+	connman_interface_agent_complete_release(agent->interface, invocation);
+
+	return TRUE;
+}
+
 static void bus_acquired_cb(GDBusConnection *connection, const gchar *name,
                             gpointer user_data)
 {
@@ -130,6 +167,10 @@ static void bus_acquired_cb(GDBusConnection *connection, const gchar *name,
 	                 G_CALLBACK(request_peer_authorization_cb), agent);
 	g_signal_connect(agent->interface, "handle-report-peer-error",
 	                 G_CALLBACK(report_error_cb), agent);
+	g_signal_connect(agent->interface, "handle-cancel",
+	                 G_CALLBACK(cancel_cb), agent);
+	g_signal_connect(agent->interface, "handle-release",
+	                 G_CALLBACK(release_cb), agent);
 
 	error = NULL;
 
