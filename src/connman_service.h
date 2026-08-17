@@ -304,7 +304,24 @@ extern gboolean connman_service_reject_peer(connman_service_t *service);
  *
  * @return FALSE if the call failed, TRUE otherwise
  */
-extern gboolean connman_service_set_default(connman_service_t *service);
+/**
+ * @brief Move service ahead of target in connman's service ordering, which is
+ *        how the default route is chosen. Both services must be favorites and
+ *        in a connected state or connman rejects the call.
+ *
+ * @param[IN] service The service to promote
+ * @param[IN] target  The service to promote it past
+ *
+ * @return TRUE if the move succeeded
+ */
+extern gboolean connman_service_move_before(connman_service_t *service,
+        connman_service_t *target);
+
+/**
+ * @brief Move service behind target in connman's service ordering.
+ */
+extern gboolean connman_service_move_after(connman_service_t *service,
+        connman_service_t *target);
 
 /**
  * remove a remote connman service

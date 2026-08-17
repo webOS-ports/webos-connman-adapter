@@ -1473,16 +1473,41 @@ gboolean connman_service_reject_peer(connman_service_t *service)
  * Set the given service as default interface(see header for API details)
  */
 
-gboolean connman_service_set_default(connman_service_t *service)
+gboolean connman_service_move_before(connman_service_t *service,
+                                     connman_service_t *target)
 {
-	if (NULL == service)
+	GError *error = NULL;
+
+	if (NULL == service || NULL == target || service == target)
 	{
 		return FALSE;
 	}
 
+	connman_interface_service_call_move_before_sync(service->remote,
+	        target->path, NULL, &error);
+
+	if (error)
+	{
+		WCALOG_ESCAPED_ERRMSG(MSGID_SERVICE_SET_DEFAULT_ERROR, error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+gboolean connman_service_move_after(connman_service_t *service,
+                                    connman_service_t *target)
+{
 	GError *error = NULL;
 
-	connman_interface_service_call_set_default_sync(service->remote, NULL, &error);
+	if (NULL == service || NULL == target || service == target)
+	{
+		return FALSE;
+	}
+
+	connman_interface_service_call_move_after_sync(service->remote,
+	        target->path, NULL, &error);
 
 	if (error)
 	{

@@ -2868,7 +2868,22 @@ static bool handle_set_default_interface(LSHandle *sh, LSMessage *message,
 		else if(service_state == CONNMAN_SERVICE_STATE_READY
 			|| service_state == CONNMAN_SERVICE_STATE_CONFIGURATION)
 		{
-			if (connman_service_set_default(service))
+			/*
+			 * Connman hands the default route to the first connected
+			 * favorite in its service ordering, so promoting this service
+			 * past the current default is what makes it default. The webOS
+			 * OSE connman fork had a SetDefault method for this; upstream
+			 * expects MoveBefore.
+			 */
+			connman_service_t *current_default =
+			        connman_manager_get_default_service(manager->wired_services);
+
+			if (NULL == current_default || current_default == service)
+			{
+				/* Nothing ranked ahead of it, so it already is the default */
+				LSMessageReplySuccess(sh, message);
+			}
+			else if (connman_service_move_before(service, current_default))
 			{
 				LSMessageReplySuccess(sh, message);
 			}

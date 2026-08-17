@@ -162,7 +162,16 @@ limitations under the License.
 		</method>
 		<method name="Remove">
 		</method>
-		<method name="SetDefault">
+		<method name="ClearProperty">
+			<arg type="s" direction="in"/>
+		</method>
+		<method name="MoveBefore">
+			<arg type="o" direction="in"/>
+		</method>
+		<method name="MoveAfter">
+			<arg type="o" direction="in"/>
+		</method>
+		<method name="ResetCounters">
 		</method>
 		<signal name="PropertyChanged">
 			<arg type="s"/>
