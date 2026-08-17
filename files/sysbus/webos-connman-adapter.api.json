@@ -3,7 +3,8 @@
         "com.webos.service.connectionmanager/findProxyForURL",
         "com.webos.service.connectionmanager/getinfo",
         "com.webos.service.connectionmanager/getStatus",
-        "com.webos.service.connectionmanager/getstatus"
+        "com.webos.service.connectionmanager/getstatus",
+        "com.webos.service.connectionmanager/getServiceCounters"
     ],
     "networkconnection.management": [
         "com.webos.service.connectionmanager/setdns",
@@ -13,7 +14,10 @@
         "com.webos.service.connectionmanager/setstate",
         "com.webos.service.connectionmanager/setTechnologyState",
         "com.webos.service.connectionmanager/monitorActivity",
-        "com.webos.service.connectionmanager/setDefaultInterface"
+        "com.webos.service.connectionmanager/setDefaultInterface",
+        "com.webos.service.connectionmanager/setTimeservers",
+        "com.webos.service.connectionmanager/setmDNS",
+        "com.webos.service.connectionmanager/resetServiceCounters"
     ],
     "wifi.query": [
         "com.webos.service.wifi/findnetworks",
@@ -84,6 +88,7 @@
         "com.webos.service.wan/getContext",
         "com.webos.service.wan/setHostRoutes",
         "com.webos.service.wifi/getstatus",
-        "com.webos.service.wifi/getwifidiagnostics"
+        "com.webos.service.wifi/getwifidiagnostics",
+        "com.webos.service.connectionmanager/getServiceCounters"
     ]
 }

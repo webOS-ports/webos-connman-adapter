@@ -698,6 +698,90 @@ gboolean connman_service_set_domains(connman_service_t *service, GStrv domains)
 }
 
 /**
+ * Set the NTP servers for the given service (see header for API details)
+ */
+
+gboolean connman_service_set_timeservers(connman_service_t *service,
+        GStrv timeservers)
+{
+	GError *error = NULL;
+
+	if (NULL == service || NULL == timeservers)
+	{
+		return FALSE;
+	}
+
+	connman_interface_service_call_set_property_sync(service->remote,
+	        "Timeservers.Configuration",
+	        g_variant_new_variant(g_variant_new_strv((const gchar * const *)
+	                              timeservers, g_strv_length(timeservers))), NULL, &error);
+
+	if (error)
+	{
+		WCALOG_ESCAPED_ERRMSG(MSGID_SERVICE_SET_TIMESERVERS_ERROR, error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/**
+ * Enable or disable multicast DNS on the given service (see header for API details)
+ */
+
+gboolean connman_service_set_mdns(connman_service_t *service, gboolean enabled)
+{
+	GError *error = NULL;
+
+	if (NULL == service)
+	{
+		return FALSE;
+	}
+
+	connman_interface_service_call_set_property_sync(service->remote,
+	        "mDNS.Configuration",
+	        g_variant_new_variant(g_variant_new_boolean(enabled)), NULL, &error);
+
+	if (error)
+	{
+		WCALOG_ESCAPED_ERRMSG(MSGID_SERVICE_SET_MDNS_ERROR, error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/**
+ * Zero the traffic counters for the given service (see header for API details)
+ */
+
+gboolean connman_service_reset_counters(connman_service_t *service)
+{
+	GError *error = NULL;
+
+	if (NULL == service)
+	{
+		return FALSE;
+	}
+
+	connman_interface_service_call_reset_counters_sync(service->remote, NULL,
+	        &error);
+
+	if (error)
+	{
+		WCALOG_ESCAPED_ERRMSG(MSGID_SERVICE_RESET_COUNTERS_ERROR, error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	memset(&service->stats, 0, sizeof(service->stats));
+
+	return TRUE;
+}
+
+/**
  * Set auto-connect property for the given service (see header for API details)
  */
 
@@ -973,6 +1057,18 @@ gboolean connman_service_get_ipinfo(connman_service_t *service)
 
 			g_strfreev(service->ipinfo.domains);
 			service->ipinfo.domains = g_variant_dup_strv(va, NULL);
+
+			g_variant_unref(v);
+			g_variant_unref(va);
+		}
+
+		if (!g_strcmp0(key, "Timeservers"))
+		{
+			GVariant *v = g_variant_get_child_value(property, 1);
+			GVariant *va = g_variant_get_child_value(v, 0);
+
+			g_strfreev(service->timeservers);
+			service->timeservers = g_variant_dup_strv(va, NULL);
 
 			g_variant_unref(v);
 			g_variant_unref(va);
@@ -1787,6 +1883,46 @@ void connman_service_update_properties(connman_service_t *service,
 		{
 			service->roaming = g_variant_get_boolean(val);
 		}
+		else if (!g_strcmp0(key, "mDNS"))
+		{
+			service->mdns = g_variant_get_boolean(val);
+		}
+		else if (!g_strcmp0(key, "RX.Bytes"))
+		{
+			service->stats.rx_bytes = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "TX.Bytes"))
+		{
+			service->stats.tx_bytes = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "RX.Packets"))
+		{
+			service->stats.rx_packets = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "TX.Packets"))
+		{
+			service->stats.tx_packets = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "RX.Errors"))
+		{
+			service->stats.rx_errors = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "TX.Errors"))
+		{
+			service->stats.tx_errors = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "RX.Dropped"))
+		{
+			service->stats.rx_dropped = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "TX.Dropped"))
+		{
+			service->stats.tx_dropped = g_variant_get_uint32(val);
+		}
+		else if (!g_strcmp0(key, "Time"))
+		{
+			service->stats.time = g_variant_get_uint32(val);
+		}
 		else if (!g_strcmp0(key, "Online"))
 		{
 			connman_service_advance_online_state(service, val);
@@ -2169,6 +2305,7 @@ void connman_service_free(gpointer data, gpointer user_data)
 	g_free(service->ipinfo.ipv6.gateway);
 	g_strfreev(service->ipinfo.dns);
 	g_strfreev(service->ipinfo.domains);
+	g_strfreev(service->timeservers);
 
 	g_free(service->proxyinfo.method);
 	g_free(service->proxyinfo.url);

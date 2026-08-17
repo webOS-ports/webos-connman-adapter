@@ -46,6 +46,10 @@
 #define LUNA_METHOD_SETPROXY              "setProxy"
 #define LUNA_METHOD_FINDPROXYFORURL       "findProxyForURL"
 #define LUNA_METHOD_SETDEFAULT            "setDefaultInterface"
+#define LUNA_METHOD_SETTIMESERVERS        "setTimeservers"
+#define LUNA_METHOD_SETMDNS               "setmDNS"
+#define LUNA_METHOD_GETCOUNTERS           "getServiceCounters"
+#define LUNA_METHOD_RESETCOUNTERS         "resetServiceCounters"
 
 
 enum ipadress_type

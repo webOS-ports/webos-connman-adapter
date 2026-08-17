@@ -71,6 +71,23 @@ typedef struct ipinfo
 } ipinfo_t;
 
 /**
+ * Cumulative traffic counters connman keeps per service
+ *
+ */
+typedef struct servicestats
+{
+	guint32 rx_bytes;
+	guint32 tx_bytes;
+	guint32 rx_packets;
+	guint32 tx_packets;
+	guint32 rx_errors;
+	guint32 tx_errors;
+	guint32 rx_dropped;
+	guint32 tx_dropped;
+	guint32 time; /* seconds the service has been connected */
+} servicestats_t;
+
+/**
  * Proxy information for the service
  *
  */
@@ -145,8 +162,11 @@ typedef struct connman_service
 	gboolean hidden;
 	gboolean online;
 	gboolean online_checking;
+	gboolean mdns; /* Multicast DNS active on this service */
 	gint type;
 	ipinfo_t ipinfo;
+	GStrv timeservers; /* NTP servers in use for this service */
+	servicestats_t stats;
 	proxyinfo_t proxyinfo;
 	GStrv hostroutes;
 	gulong sighandler_id;
@@ -388,6 +408,37 @@ extern gboolean connman_service_set_nameservers(connman_service_t *service,
  */
 extern gboolean connman_service_set_domains(connman_service_t *service,
         GStrv domains);
+
+/**
+ * Set the NTP servers to use while this service is the default
+ *
+ * @param[IN]  service A service instance
+ * @param[IN]  timeservers A NULL terminated array of NTP server names
+ *
+ * @return FALSE if the call to set "Timeservers.Configuration" failed, TRUE otherwise
+ */
+extern gboolean connman_service_set_timeservers(connman_service_t *service,
+        GStrv timeservers);
+
+/**
+ * Enable or disable multicast DNS resolution on a service
+ *
+ * @param[IN]  service A service instance
+ * @param[IN]  enabled TRUE to enable mDNS
+ *
+ * @return FALSE if the call to set "mDNS.Configuration" failed, TRUE otherwise
+ */
+extern gboolean connman_service_set_mdns(connman_service_t *service,
+        gboolean enabled);
+
+/**
+ * Zero the cumulative traffic counters connman keeps for a service
+ *
+ * @param[IN]  service A service instance
+ *
+ * @return FALSE if the ResetCounters call failed, TRUE otherwise
+ */
+extern gboolean connman_service_reset_counters(connman_service_t *service);
 
 /**
  * Set the "autoconnect" flag for a service
