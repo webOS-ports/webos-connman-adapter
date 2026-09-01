@@ -1776,6 +1776,17 @@ static void manager_property_changed_callback(gpointer data,
 	{
 		connectionmanager_send_status_to_subscribers();
 	}
+	/*
+	 * getstatus reports offlineMode, so subscribers have to be told when it
+	 * changes too. Without this the only reason an update goes out on entering
+	 * or leaving airplane mode is that some technology happens to change its
+	 * Powered state as a side effect, which is a race, and does not happen at
+	 * all when no technology was powered to begin with.
+	 */
+	else if (!g_strcmp0(property, "OfflineMode"))
+	{
+		connectionmanager_send_status_to_subscribers();
+	}
 }
 
 /**

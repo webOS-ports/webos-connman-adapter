@@ -1396,11 +1396,6 @@ static void connman_manager_update_state(connman_manager_t *manager)
 		GVariant *va = g_variant_get_variant(v);
 		const gchar *key = g_variant_get_string(key_v, NULL);
 
-		if (connman_update_callbacks->manager_property_changed)
-		{
-			connman_update_callbacks->manager_property_changed(key, va);
-		}
-
 		if (!g_strcmp0(key, "State"))
 		{
 			g_free(manager->state);
@@ -1420,6 +1415,14 @@ static void connman_manager_update_state(connman_manager_t *manager)
 			else
 				wca_support_disable_wol_status(disable_wol_status_for_quick_power_off_cb, NULL);
 #endif
+		}
+
+		/* Notify only once the property has been applied, so that a
+		 * consumer asking connman_manager_* for the new value gets the
+		 * new value and not the one it is replacing. */
+		if (connman_update_callbacks->manager_property_changed)
+		{
+			connman_update_callbacks->manager_property_changed(key, va);
 		}
 
 		g_variant_unref(v);
@@ -1890,11 +1893,6 @@ property_changed_cb(ConnmanInterfaceManager *proxy, const gchar *property,
 	WCALOG_DEBUG("Manager property %s changed : %s", property,
 	             g_variant_get_string(va, NULL));
 
-	if (connman_update_callbacks->manager_property_changed)
-	{
-		connman_update_callbacks->manager_property_changed(property, va);
-	}
-
 	if (!g_strcmp0(property, "State"))
 	{
 		g_free(manager->state);
@@ -1903,6 +1901,12 @@ property_changed_cb(ConnmanInterfaceManager *proxy, const gchar *property,
 	else if (!g_strcmp0(property, "OfflineMode"))
 	{
 		manager->offline = g_variant_get_boolean(va);
+	}
+
+	/* Same ordering as above: apply first, then notify. */
+	if (connman_update_callbacks->manager_property_changed)
+	{
+		connman_update_callbacks->manager_property_changed(property, va);
 	}
 
 	if (NULL != manager->handle_property_change_fn)
