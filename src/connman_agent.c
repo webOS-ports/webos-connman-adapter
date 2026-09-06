@@ -40,6 +40,8 @@ struct connman_agent
 	gpointer request_input_data;
 	connman_agent_report_error_cb report_error_cb;
 	gpointer report_error_data;
+	connman_agent_request_browser_cb request_browser_cb;
+	gpointer request_browser_data;
 	guint bus_id;
 };
 
@@ -150,6 +152,33 @@ static gboolean release_cb(ConnmanInterfaceAgent *interface,
 	return TRUE;
 }
 
+/*
+ * RequestBrowser is called when connman's WISPr/online check found a captive
+ * portal on the service and a browser is needed for the user to log in. The
+ * method is completed right away: connman keeps re-running the online check
+ * (OnlineCheckMode = continuous), so a successful login is picked up without
+ * any further agent interaction.
+ */
+static gboolean request_browser_cb(ConnmanInterfaceAgent *interface,
+                                   GDBusMethodInvocation *invocation,
+                                   const gchar *path,
+                                   const gchar *url,
+                                   gpointer user_data)
+{
+	connman_agent_t *agent = user_data;
+
+	WCALOG_DEBUG("Agent asked to launch a browser for %s (url %s)", path, url);
+
+	if (agent->request_browser_cb != NULL)
+	{
+		agent->request_browser_cb(path, url, agent->request_browser_data);
+	}
+
+	connman_interface_agent_complete_request_browser(agent->interface, invocation);
+
+	return TRUE;
+}
+
 static void bus_acquired_cb(GDBusConnection *connection, const gchar *name,
                             gpointer user_data)
 {
@@ -171,6 +200,8 @@ static void bus_acquired_cb(GDBusConnection *connection, const gchar *name,
 	                 G_CALLBACK(cancel_cb), agent);
 	g_signal_connect(agent->interface, "handle-release",
 	                 G_CALLBACK(release_cb), agent);
+	g_signal_connect(agent->interface, "handle-request-browser",
+	                 G_CALLBACK(request_browser_cb), agent);
 
 	error = NULL;
 
@@ -321,4 +352,25 @@ void connman_agent_set_report_error_callback(connman_agent_t *agent,
 
 	agent->report_error_cb = cb;
 	agent->report_error_data = user_data;
+}
+
+/**
+ * @brief Register a callback function for an agent object which is called once
+ * connman requests a browser for a captive portal login (RequestBrowser).
+ *
+ * @param agent Agent object
+ * @param cb Callback function
+ * @param user_data User data which is passed to the callback once its called.
+ */
+
+void connman_agent_set_request_browser_callback(connman_agent_t *agent,
+        connman_agent_request_browser_cb cb, gpointer user_data)
+{
+	if (agent == NULL)
+	{
+		return;
+	}
+
+	agent->request_browser_cb = cb;
+	agent->request_browser_data = user_data;
 }

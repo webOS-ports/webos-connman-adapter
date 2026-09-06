@@ -236,8 +236,30 @@ static void update_connection_status(connman_service_t *connected_service,
 			            jboolean_create(false));
 		}
 
-		const char *s = connman_service_is_online(connected_service) ? "yes" : "no";
+		/* Legacy webOS reported "yes", "no" or "captivePortal" here; a service
+		 * stuck in "ready" state after the agent's RequestBrowser was called is
+		 * sitting behind a captive portal awaiting a web login */
+		const char *s = "no";
+
+		if (connman_service_is_online(connected_service))
+		{
+			s = "yes";
+		}
+		else if (connected_service->captive_portal)
+		{
+			s = "captivePortal";
+		}
+
 		jobject_put(*status, J_CSTR_TO_JVAL("onInternet"), jstring_create(s));
+
+		if (!connman_service_is_online(connected_service) &&
+		    connected_service->captive_portal &&
+		    NULL != connected_service->captive_portal_url)
+		{
+			jobject_put(*status, J_CSTR_TO_JVAL("captivePortalUrl"),
+			            jstring_create(connected_service->captive_portal_url));
+		}
+
 		jobject_put(*status, J_CSTR_TO_JVAL("checkingInternet"), jboolean_create(connected_service->online_checking));
 
 		update_ipv6(status,connected_service);
@@ -958,7 +980,7 @@ netmask | no | String | Net mask value for the connection
 gateway | no | String | IP address of network gateway
 dns<n> | no | String | List of IP Addreses of dns servers for this connection
 method | no | String | How the IP addressed was assigned (e.g. "Manual", "dhcp")
-onInternet | no | String | "yes" or "no" to indicate if the service is "online"
+onInternet | no | String | "yes", "no" or "captivePortal" to indicate if the service is "online" (captivePortal: connected but a web login is required, see captivePortalUrl)
 
 @par "wifi" State Object
 
@@ -975,7 +997,7 @@ dns<n> | no | String | List of IP Addreses of dns servers for this connection
 method | no | String | How the IP addressed was assigned (e.g. "Manual", "dhcp")
 ssid | no | String | SSID of the connected service (if known)
 isWakeOnWiFiEnabled | no | Boolean | True if "Wake on WIFI" is enabled
-onInternet | no | String | "yes" or "no" to indicate if the service is "online"
+onInternet | no | String | "yes", "no" or "captivePortal" to indicate if the service is "online" (captivePortal: connected but a web login is required, see captivePortalUrl)
 
 @par "wifiDirect" State Object
 

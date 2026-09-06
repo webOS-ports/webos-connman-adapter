@@ -34,6 +34,8 @@ typedef GVariant *(*connman_agent_request_input_cb)(GVariant *fields,
         gpointer user_data);
 typedef void (*connman_agent_report_error_cb)(const char *error_message,
         gpointer user_data);
+typedef void (*connman_agent_request_browser_cb)(const gchar *path,
+        const gchar *url, gpointer user_data);
 typedef void (*connman_agent_registered_cb)(gpointer user_data);
 
 connman_agent_t *connman_agent_new(void);
@@ -45,5 +47,7 @@ void connman_agent_set_request_input_callback(connman_agent_t *agent,
         connman_agent_request_input_cb cb, gpointer user_data);
 void connman_agent_set_report_error_cb(connman_agent_t *agent,
                                        connman_agent_report_error_cb cb, gpointer user_data);
+void connman_agent_set_request_browser_callback(connman_agent_t *agent,
+        connman_agent_request_browser_cb cb, gpointer user_data);
 
 #endif

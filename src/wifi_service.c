@@ -4005,6 +4005,50 @@ static void agent_registered_callback(gpointer user_data)
 	}
 }
 
+/**
+ * Called by our connman agent when connman's online check detected a captive
+ * portal on a service and asked for a browser (net.connman.Agent
+ * RequestBrowser). Mark the service so getStatus subscribers see
+ * onInternet: "captivePortal" along with the portal's login url.
+ */
+static void agent_request_browser_callback(const gchar *path, const gchar *url,
+        gpointer user_data)
+{
+	UNUSED(user_data);
+
+	connman_service_t *service = NULL;
+
+	if (NULL != manager)
+	{
+		service = connman_manager_find_service_by_path(manager->wifi_services, path);
+
+		if (NULL == service)
+		{
+			service = connman_manager_find_service_by_path(manager->wired_services, path);
+		}
+
+		if (NULL == service)
+		{
+			service = connman_manager_find_service_by_path(manager->cellular_services,
+			          path);
+		}
+	}
+
+	if (NULL == service)
+	{
+		WCALOG_INFO(MSGID_CONNECTION_INFO, 0,
+		            "RequestBrowser for unknown service %s", path);
+		return;
+	}
+
+	WCALOG_INFO(MSGID_CONNECTION_INFO, 0,
+	            "Captive portal detected on service %s, login url %s", path,
+	            (NULL != url) ? url : "(none)");
+
+	connman_service_set_captive_portal(service, TRUE, url);
+	connectionmanager_send_status_to_subscribers();
+}
+
 static void connman_service_stopped(GDBusConnection *conn, const gchar *name,
                                     const gchar *name_owner, gpointer user_data)
 {
@@ -4071,6 +4115,8 @@ static void connman_service_started(GDBusConnection *conn, const gchar *name,
 	}
 
 	connman_agent_set_registered_callback(agent, agent_registered_callback, NULL);
+	connman_agent_set_request_browser_callback(agent,
+	        agent_request_browser_callback, NULL);
 
 	/* Register for manager's "PropertyChanged" and "ServicesChanged" signals for sending 'getstatus' and 'findnetworks'
 	   methods to their subscribers */

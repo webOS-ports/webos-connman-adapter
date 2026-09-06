@@ -162,6 +162,10 @@ typedef struct connman_service
 	gboolean hidden;
 	gboolean online;
 	gboolean online_checking;
+	/* connman's online check hit a captive portal on this service and asked
+	 * for a browser (agent RequestBrowser); only meaningful in "ready" state */
+	gboolean captive_portal;
+	gchar *captive_portal_url; /* Portal login url from RequestBrowser, may be NULL */
 	gboolean mdns; /* Multicast DNS active on this service */
 	gint type;
 	ipinfo_t ipinfo;
@@ -550,6 +554,8 @@ extern gboolean connman_service_set_passphrase(connman_service_t *service,
 
 extern gboolean connman_service_is_connected(connman_service_t *service);
 extern gboolean connman_service_is_online(connman_service_t *service);
+extern void connman_service_set_captive_portal(connman_service_t *service,
+        gboolean captive, const gchar *url);
 extern gboolean connman_peer_connect(connman_service_t *service,
                                  connman_service_connect_cb cb, gpointer user_data);
 extern gboolean connman_peer_disconnect(connman_service_t *service);

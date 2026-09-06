@@ -1261,6 +1261,14 @@ static void connman_service_advance_state(connman_service_t *service,
 		g_free(service->state);
 		service->state = g_strdup(new_state);
 
+		/* A captive portal mark is only meaningful while the service stays
+		 * in "ready" state; any transition away from it (online after a
+		 * successful login, or disconnect/idle/failure) invalidates it */
+		if (service->captive_portal && g_strcmp0(new_state, "ready") != 0)
+		{
+			connman_service_set_captive_portal(service, FALSE, NULL);
+		}
+
 		connman_service_set_changed(service,
 		                            CONNMAN_SERVICE_CHANGE_CATEGORY_GETSTATUS |
 		                            CONNMAN_SERVICE_CHANGE_CATEGORY_FINDNETWORKS);
@@ -2167,6 +2175,27 @@ gboolean connman_service_is_online(connman_service_t *service)
 }
 
 /**
+ * Mark a service as being behind a captive portal, or clear that mark
+ * (see header for API details)
+ */
+
+void connman_service_set_captive_portal(connman_service_t *service,
+                                        gboolean captive, const gchar *url)
+{
+	if (NULL == service)
+	{
+		return;
+	}
+
+	service->captive_portal = captive;
+	g_free(service->captive_portal_url);
+	service->captive_portal_url = (captive && NULL != url) ? g_strdup(url) : NULL;
+
+	connman_service_set_changed(service,
+	                            CONNMAN_SERVICE_CHANGE_CATEGORY_GETSTATUS);
+}
+
+/**
  * Create a new connman service instance and set its properties  (see header for API details)
  */
 
@@ -2306,6 +2335,9 @@ void connman_service_free(gpointer data, gpointer user_data)
 	g_strfreev(service->ipinfo.dns);
 	g_strfreev(service->ipinfo.domains);
 	g_strfreev(service->timeservers);
+
+	g_free(service->captive_portal_url);
+	service->captive_portal_url = NULL;
 
 	g_free(service->proxyinfo.method);
 	g_free(service->proxyinfo.url);
