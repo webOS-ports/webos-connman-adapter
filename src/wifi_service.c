@@ -49,6 +49,7 @@ errorText | Yes | String | Error description
 #include "wifi_profile.h"
 #include "wifi_setting.h"
 #include "wifi_scan.h"
+#include "wifi_ap_info.h"
 #include "connman_manager.h"
 #include "connman_agent.h"
 #include "lunaservice_utils.h"
@@ -386,6 +387,63 @@ static void add_connected_network_status(jvalue_ref *reply,
 		}
 
 		jobject_put(*reply,  J_CSTR_TO_JVAL("ipInfo"), ip_info);
+
+		/*
+		 * What the access point itself is, which ConnMan does not
+		 * carry: its Strength is a normalised percentage and it says
+		 * nothing about the channel. The legacy Wi-Fi app showed
+		 * exactly this group, so keep the shape it expected and add
+		 * the width alongside. Only meaningful once associated, hence
+		 * its place inside the connected branch - and it needs the
+		 * interface name that connman_service_get_ipinfo() above is
+		 * what fills in.
+		 */
+		if (connected_service->ipinfo.iface != NULL)
+		{
+			wifi_ap_info_t ap_info;
+
+			if (wifi_ap_info_get(connected_service->ipinfo.iface,
+			                     &ap_info))
+			{
+				jvalue_ref ap_info_j = jobject_create();
+
+				if (ap_info.bssid != NULL)
+				{
+					jobject_put(ap_info_j,
+					            J_CSTR_TO_JVAL("bssid"),
+					            jstring_create(ap_info.bssid));
+				}
+
+				if (ap_info.channel > 0)
+				{
+					jobject_put(ap_info_j,
+					            J_CSTR_TO_JVAL("channel"),
+					            jnumber_create_i32(ap_info.channel));
+				}
+
+				if (ap_info.frequency > 0)
+				{
+					jobject_put(ap_info_j,
+					            J_CSTR_TO_JVAL("frequency"),
+					            jnumber_create_i32(ap_info.frequency));
+				}
+
+				if (ap_info.width > 0)
+				{
+					jobject_put(ap_info_j,
+					            J_CSTR_TO_JVAL("channelWidth"),
+					            jnumber_create_i32(ap_info.width));
+				}
+
+				jobject_put(ap_info_j,
+				            J_CSTR_TO_JVAL("signalLevel"),
+				            jnumber_create_i32(ap_info.signal_level));
+
+				jobject_put(*reply, J_CSTR_TO_JVAL("apInfo"),
+				            ap_info_j);
+				wifi_ap_info_free(&ap_info);
+			}
+		}
 	}
 }
 
@@ -2989,6 +3047,17 @@ connectState | Yes | String | One of {notAssociated, associating, associated, ip
 signalBars | Yes | Integer | Coarse indication of signal strength (1..3)
 signalLevel | Yes | Integer | Absolute indication of signal strength
 ipInfo | Yes | Object | See below
+apInfo | No | Object | See below. Present only while connected
+
+@par "apInfo" Object
+
+Name | Required | Type | Description
+-----|--------|------|----------
+bssid | No | String | MAC address of the associated access point
+channel | No | Integer | Channel the access point operates on
+frequency | No | Integer | Operating frequency in MHz
+channelWidth | No | Integer | Operating width in MHz (20, 40, 80, 160; 8080 for 80+80)
+signalLevel | Yes | Integer | Signal in dBm, unlike networkInfo's percentage
 
 @par "ipInfo" Object
 

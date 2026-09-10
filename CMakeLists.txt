@@ -143,6 +143,7 @@ file(GLOB SOURCE_FILES
     src/wifi_tethering_service.c
     src/wifi_profile.c
     src/wifi_service.c
+    src/wifi_ap_info.c
     src/wifi_setting.c
     src/wifi_scan.c
     src/state_recovery.c
