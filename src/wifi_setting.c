@@ -23,10 +23,20 @@
 
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+/* Blowfish is deprecated since OpenSSL 3.0 and this scheme (fixed key,
+ * all-zero IV) is obfuscation rather than real encryption - but profiles
+ * already stored in luna-prefs on devices are encrypted with it, so
+ * replacing it needs a data migration. Keep it and silence the
+ * deprecation warnings deliberately. */
+#define OPENSSL_SUPPRESS_DEPRECATED
 #include <openssl/blowfish.h>
 #include <lunaprefs.h>
 #include <pbnjson.h>
 #include <sys/inotify.h>
+#include <limits.h>
 
 #include "wifi_setting.h"
 #include "wifi_profile.h"
@@ -181,8 +191,17 @@ static gboolean populate_wifi_profile(jvalue_ref profileObj)
 		bool configured = false;
 		JSchemaInfo schemaInfo;
 		jvalue_ref parsedObj = {0};
-		jschema_ref input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT,
-		                           NULL);
+		jschema_ref input_schema = NULL;
+
+		/* A corrupted or undecryptable stored profile must not crash the
+		 * daemon at startup (jdom_parse would strlen(NULL)). */
+		if (NULL == dec_profile)
+		{
+			goto Exit;
+		}
+
+		input_schema = jschema_parse(j_cstr_to_buffer("{}"), DOMOPT_NOOPT,
+		                             NULL);
 
 		if (!input_schema)
 		{
@@ -214,7 +233,7 @@ static gboolean populate_wifi_profile(jvalue_ref profileObj)
 		if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("security"), &securityListObj))
 		{
 			ssize_t i, num_elems = jarray_size(securityListObj);
-			security = (GStrv) g_new0(GStrv, num_elems + 1);
+			security = g_new0(gchar *, num_elems + 1);
 
 			for (i = 0; i < num_elems; i++)
 			{
@@ -502,32 +521,53 @@ static gboolean store_config(GKeyFile *keyfile, char *pathname)
 {
 	gchar *data = NULL;
 	gsize length = 0;
+	gboolean ret = FALSE;
 
 	data = g_key_file_to_data(keyfile, &length, NULL);
 
-	if (length > 0)
+	if (data != NULL && length > 0)
 	{
-		FILE *fp;
-		fp = g_fopen(pathname, "w");
+		/* The config may contain plaintext passphrases: create it 0600 and
+		 * write via a temp file + rename so a crash can never leave a
+		 * truncated config for connman to load. */
+		gchar *tmppath = g_strdup_printf("%s.tmp", pathname);
+		int fd = open(tmppath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 
-		if (fp == NULL)
+		if (fd >= 0)
 		{
-			return FALSE;
+			FILE *fp = fdopen(fd, "w");
+
+			if (fp != NULL)
+			{
+				gboolean write_ok = (fprintf(fp, "%s", data) >= 0);
+
+				if (fclose(fp) != 0)
+				{
+					write_ok = FALSE;
+				}
+
+				if (write_ok)
+				{
+					ret = (g_rename(tmppath, pathname) == 0);
+				}
+			}
+			else
+			{
+				close(fd);
+			}
+
+			if (!ret)
+			{
+				g_unlink(tmppath);
+			}
 		}
 
-                if(fprintf(fp, "%s", data)<0)
-                {
-                        WCALOG_DEBUG("Failed_fprintf");
-                }
-                if(fclose(fp)!=0)
-                {
-                        WCALOG_DEBUG("Failed_fileClose");
-                }
-        }
+		g_free(tmppath);
+	}
 
 	g_free(data);
 
-	return TRUE;
+	return ret;
 }
 
 static GKeyFile *load_config(const char *pathname)
@@ -696,7 +736,7 @@ gboolean store_network_config(connection_settings_t *settings,
 		}
 	}
 
-	security_type = (GStrv) g_new0(GStrv, 2);
+	security_type = g_new0(gchar *, 2);
 	security_type[0] = g_strdup(security);
 	security_type[1] = NULL;
 
@@ -714,7 +754,8 @@ gboolean store_network_config(connection_settings_t *settings,
 
 	send_getnetworks_status_to_subscribers();
 
-	g_free(security_type);
+	/* free the strings too, not just the pointer array */
+	g_strfreev(security_type);
 
 cleanup:
 	g_free(pathname);
@@ -895,18 +936,9 @@ gboolean change_network_dns(const char *ssid, const char *security,
 
 	config_group = g_strdup_printf("service_%s", ssid);
 
-	gsize i, num_elems = g_strv_length(dns);
-	gchar *dnsstr = g_strnfill(16 * (num_elems + 1), 0);
-
-	for (i = 0; i < num_elems; i++)
-	{
-		dnsstr = strncat(dnsstr, dns[i], strlen(dns[i]));
-
-		if (i < (num_elems - 1))
-		{
-			dnsstr = strncat(dnsstr, ",", strlen(","));
-		}
-	}
+	/* g_strjoinv sizes the result itself; the old fixed 16-bytes-per-entry
+	 * buffer overflowed on any IPv6 nameserver. */
+	gchar *dnsstr = g_strjoinv(",", (gchar **) dns);
 
 	g_key_file_set_string(keyfile, config_group, "Nameservers", dnsstr);
 
@@ -982,7 +1014,7 @@ gboolean check_profile_or_create(const char *file, gchar **pathname)
 	for (i = 0; groups[i] != NULL; i++)
 	{
 		char *ident, *type, *ssid, *security;
-		gboolean hidden = FALSE, security_found = FALSE;
+		gboolean hidden = FALSE;
 
 		if (g_str_has_prefix(groups[i], "service_") == FALSE)
 		{
@@ -1001,13 +1033,17 @@ gboolean check_profile_or_create(const char *file, gchar **pathname)
 
 		if (type == NULL || g_strcmp0(type, "wifi") != 0)
 		{
+			g_free(type);
 			continue;
 		}
+
+		g_free(type);
 
 		ssid = g_key_file_get_string(keyfile, groups[i], "Name", NULL);
 
 		if (ssid == NULL || g_strcmp0(ssid, ident) != 0)
 		{
+			g_free(ssid);
 			continue;
 		}
 
@@ -1015,11 +1051,16 @@ gboolean check_profile_or_create(const char *file, gchar **pathname)
 
 		if (security == NULL)
 		{
-			security = g_strdup("none");
-		}
-		else
-		{
-			security_found = TRUE;
+			/* connman treats a provisioning entry that carries a Passphrase
+			 * but no explicit Security as psk-protected, not open. */
+			if (g_key_file_has_key(keyfile, groups[i], "Passphrase", NULL))
+			{
+				security = g_strdup("psk");
+			}
+			else
+			{
+				security = g_strdup("none");
+			}
 		}
 
 		hidden = g_key_file_get_boolean(keyfile, groups[i], "Hidden", NULL);
@@ -1039,6 +1080,7 @@ gboolean check_profile_or_create(const char *file, gchar **pathname)
 		}
 
 		g_free(security);
+		g_free(ssid);
 
 		// Found a valid service_* entry, so skipping other service_* entries, if any
 		ret = TRUE;
@@ -1183,7 +1225,11 @@ void sync_network_configs_with_profiles(void)
 static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
                              gpointer user_data)
 {
-	char buffer[256];
+	/* Big enough for at least one maximal event: the kernel returns EINVAL
+	 * if the buffer cannot hold the next event, which would kill the watch
+	 * permanently the first time a long filename shows up. */
+	char buffer[sizeof(struct inotify_event) + NAME_MAX + 1]
+			__attribute__((aligned(__alignof__(struct inotify_event))));
 	char *next_event;
 	gsize bytes_read = 0;
 	GIOStatus status;
@@ -1217,6 +1263,11 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 		gchar *file;
 		gsize len;
 
+		if (bytes_read < sizeof(struct inotify_event))
+		{
+			break;
+		}
+
 		event = (struct inotify_event *) next_event;
 
 		if (event->len)
@@ -1225,6 +1276,10 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 		}
 		else
 		{
+			/* nameless event (e.g. IN_Q_OVERFLOW): skip it - a bare
+			 * continue here would spin forever without advancing */
+			next_event += sizeof(struct inotify_event);
+			bytes_read -= sizeof(struct inotify_event);
 			continue;
 		}
 

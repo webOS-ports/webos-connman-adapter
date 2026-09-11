@@ -74,6 +74,7 @@ typedef struct connection_settings
 extern int initialize_wifi_ls2_calls(GMainLoop *mainloop,
                                      LSHandle **wifi_handle);
 extern connection_settings_t *connection_settings_new(void);
+extern void connection_settings_free(connection_settings_t *settings);
 extern GVariant *agent_request_input_callback(GVariant *fields, gpointer data);
 extern gint generate_new_wpspin(void);
 extern void wifi_service_local_has_changed();

@@ -111,7 +111,7 @@ connection_settings_t *connection_settings_new(void)
 	return settings;
 }
 
-static void connection_settings_free(connection_settings_t *settings)
+void connection_settings_free(connection_settings_t *settings)
 {
 	g_free(settings->passkey);
 	g_free(settings->ssid);

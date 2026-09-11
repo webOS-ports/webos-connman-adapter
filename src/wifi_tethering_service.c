@@ -40,7 +40,7 @@
 #include "errors.h"
 
 #define WIFI_STATUS_TIMEOUT     1
-#define WIFI_TETHERING_USED_RX_BYTES_TRESHOLD(x)        5000*x
+#define WIFI_TETHERING_USED_RX_BYTES_TRESHOLD(x)        (5000*(x))
 
 LSHandle *tetheringpLSHandle = NULL;
 
@@ -52,54 +52,73 @@ static guint wifi_tethering_client_count = 0;
 
 void start_tethering_timeout(void);
 
+static gboolean run_wpa_cli(gchar **argv, gchar **out_stdout)
+{
+	GError *error = NULL;
+	gint wait_status = 0;
+
+	if (!g_spawn_sync(NULL, argv, NULL,
+	                  G_SPAWN_SEARCH_PATH |
+	                  (out_stdout ? 0 : G_SPAWN_STDOUT_TO_DEV_NULL) |
+	                  G_SPAWN_STDERR_TO_DEV_NULL,
+	                  NULL, NULL, out_stdout, NULL, &wait_status, &error))
+	{
+		WCALOG_ERROR(MSGID_TETHERING_METHODS_LUNA_ERROR, 0, "Failed to run wpa_cli: %s",
+		             error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return g_spawn_check_wait_status(wait_status, NULL);
+}
+
 static int get_max_station_count(void)
 {
 	int ret = -1;
-	FILE *fp = NULL;
-	char buff[1024];
-	size_t readSize = 0;
-	char *max_num_sta = NULL;
+	gchar *output = NULL;
+	gchar *argv[] = { "wpa_cli", "-i", CONNMAN_WIFI_INTERFACE_NAME, "get",
+	                  "max_num_sta", NULL };
 
-	fp = popen("wpa_cli -i wlan0 get max_num_sta", "r");
-	if (NULL == fp)
+	if (!run_wpa_cli(argv, &output))
 	{
-	   return ret;
-	}
-
-	readSize = fread((void*)buff, sizeof(char), 1024 - 1, fp);
-	if (0 == readSize)
-	{
-		pclose(fp);
+		g_free(output);
 		return ret;
 	}
-	buff[readSize]='0';
 
-	max_num_sta = g_strndup(buff, readSize);
-	ret = atoi(max_num_sta);
+	if (output != NULL)
+	{
+		/* wpa_cli prints "FAIL" on error; atoi would return 0 for that and
+		 * the caller treats only negative values as errors */
+		char *end = NULL;
+		long val = strtol(output, &end, 10);
 
-	pclose(fp);
-	g_free(max_num_sta);
+		if (end != output && val > 0 && val <= 254)
+		{
+			ret = (int) val;
+		}
+	}
+
+	g_free(output);
 
 	return ret;
 }
 
 static bool set_max_station_count(gint count)
 {
-	char *command = NULL;
-
 	if (count <= 0 || count > 254)
 		return false;
 
-	command = g_strdup_printf("%s %d","wpa_cli -i wlan0 set max_num_sta" , count);
+	gchar *count_str = g_strdup_printf("%d", count);
+	gchar *set_argv[] = { "wpa_cli", "-i", CONNMAN_WIFI_INTERFACE_NAME, "set",
+	                      "max_num_sta", count_str, NULL };
+	gchar *save_argv[] = { "wpa_cli", "-i", CONNMAN_WIFI_INTERFACE_NAME,
+	                       "save_config", NULL };
 
-	if(command != NULL)
-	{
-		(void)system(command);
-		(void)system("wpa_cli -i wlan0 save_config");
-		g_free(command);
-	}
+	bool ret = run_wpa_cli(set_argv, NULL) && run_wpa_cli(save_argv, NULL);
 
-	return true;
+	g_free(count_str);
+
+	return ret;
 }
 
 static void support_tethering_disabled_cb(bool success, void *user_data)
@@ -119,7 +138,7 @@ static void support_tethering_disabled_cb(bool success, void *user_data)
 			                          "Failed to disable tethering mode through support library",
 			                          WCA_API_ERROR_TETHERING_SUPPORT_FAILED);
 
-		return;
+		goto done;
 	}
 
 	connman_technology_t *wifi_tech = connman_manager_find_wifi_technology(manager);
@@ -130,7 +149,7 @@ static void support_tethering_disabled_cb(bool success, void *user_data)
 			LSMessageReplyCustomError(handle, message, "WiFi technology unavailable",
 			                          WCA_API_ERROR_WIFI_TECH_UNAVAILABLE);
 
-		return;
+		goto done;
 	}
 
 	if (!connman_technology_set_tethering(wifi_tech, FALSE))
@@ -139,7 +158,7 @@ static void support_tethering_disabled_cb(bool success, void *user_data)
 			LSMessageReplyCustomError(handle, message, "Failed to disable tethering mode",
 			                          WCA_API_ERROR_TETHERING_DISABLE_FAILED);
 
-		return;
+		goto done;
 	}
 
 
@@ -151,10 +170,20 @@ static void support_tethering_disabled_cb(bool success, void *user_data)
 			                          "Failed to restore WiFi state after disbling tethering",
 			                          WCA_API_ERROR_TETHERING_RESTORE_WIFI_STATE_FAILED);
 
-		return;
+		goto done;
 	}
 
-	LSMessageReplySuccess(handle, message);
+	if (message)
+	{
+		LSMessageReplySuccess(handle, message);
+	}
+
+done:
+	/* drop the ref taken in set_wifi_tethering */
+	if (message)
+	{
+		LSMessageUnref(message);
+	}
 }
 
 static void support_tethering_disabled_after_failure_cb(bool success,
@@ -173,6 +202,10 @@ static void support_tethering_disabled_after_failure_cb(bool success,
 
 	LSMessageReplyCustomError(handle, message, "Failed to enable tethering mode",
 	                          WCA_API_ERROR_TETHERING_ENABLE_FAILED);
+
+	/* drop the ref taken in set_wifi_tethering (forwarded here by
+	 * support_tethering_enabled_cb) */
+	LSMessageUnref(message);
 }
 
 static void support_tethering_enabled_cb(bool success, void *user_data)
@@ -192,7 +225,7 @@ static void support_tethering_enabled_cb(bool success, void *user_data)
 			                          "Failed to enable tethering mode through support library",
 			                          WCA_API_ERROR_TETHERING_SUPPORT_FAILED);
 
-		return;
+		goto done;
 	}
 
 	connman_technology_t *wifi_tech = connman_manager_find_wifi_technology(manager);
@@ -203,12 +236,13 @@ static void support_tethering_enabled_cb(bool success, void *user_data)
 			LSMessageReplyCustomError(handle, message, "WiFi technology unavailable",
 			                          WCA_API_ERROR_WIFI_TECH_UNAVAILABLE);
 
-		return;
+		goto done;
 	}
 
 	if (!connman_technology_set_tethering(wifi_tech, TRUE))
 	{
-		/* disable tethering support again */
+		/* disable tethering support again; the message ref travels along and
+		 * is dropped by support_tethering_disabled_after_failure_cb */
 		wca_support_wifi_disable_tethering(support_tethering_disabled_after_failure_cb,
 		                                   message);
 		return;
@@ -220,6 +254,13 @@ static void support_tethering_enabled_cb(bool success, void *user_data)
 	if (message)
 	{
 		LSMessageReplySuccess(handle, message);
+	}
+
+done:
+	/* drop the ref taken in set_wifi_tethering */
+	if (message)
+	{
+		LSMessageUnref(message);
 	}
 }
 
@@ -254,6 +295,14 @@ gboolean set_wifi_tethering(bool state, LSMessage *message)
 		previous_wifi_legacy_powered = is_wifi_powered();
 	}
 
+	/* The callbacks reply on this message after the current handler has
+	 * returned; without a ref LS2 would have released it by then. The
+	 * callbacks drop the ref once they have replied. */
+	if (message)
+	{
+		LSMessageRef(message);
+	}
+
 	if (state)
 	{
 		connman_service_t *connected_service = connman_manager_get_connected_service(
@@ -286,18 +335,20 @@ static void send_tethering_state(jvalue_ref *reply)
 
 	connman_technology_t *wifi_tech = connman_manager_find_wifi_technology(manager);
 
+	if (NULL == wifi_tech)
+	{
+		return;
+	}
+
 	if (NULL != wifi_tech->tethering_identifier)
 	{
 		jobject_put(*reply, J_CSTR_TO_JVAL("ssid"),
 		            jstring_create(wifi_tech->tethering_identifier));
 	}
 
-	if (NULL != wifi_tech->tethering_identifier)
-	{
-		jobject_put(*reply, J_CSTR_TO_JVAL("securityType"),
-		            jstring_create((NULL != wifi_tech->tethering_passphrase)
-		                           && (strlen(wifi_tech->tethering_passphrase) != 0) ? "psk" : "open"));
-	}
+	jobject_put(*reply, J_CSTR_TO_JVAL("securityType"),
+	            jstring_create((NULL != wifi_tech->tethering_passphrase)
+	                           && (strlen(wifi_tech->tethering_passphrase) != 0) ? "psk" : "open"));
 
 	if (NULL != wifi_tech->tethering_ipaddress)
 	{
@@ -443,13 +494,19 @@ static void sta_authorized_cb(gpointer user_data)
 
 static void sta_deauthorized_cb(gpointer user_data)
 {
-	wifi_tethering_client_count--;
+	/* the count is reset to 0 when tethering is (re)enabled, so a deauth
+	 * for a station attached before that must not underflow the counter -
+	 * the timeout would then never restart */
+	if (wifi_tethering_client_count > 0)
+	{
+		wifi_tethering_client_count--;
+	}
 
 	WCALOG_DEBUG("WiFi tethering client disconnected");
 
 	if (wifi_tethering_client_count > 0)
 	{
-		WCALOG_DEBUG("Not restarting timeout as we have %d clients left",
+		WCALOG_DEBUG("Not restarting timeout as we have %u clients left",
 		             wifi_tethering_client_count);
 		return;
 	}
@@ -711,7 +768,17 @@ static bool handle_set_state_command(LSHandle *sh, LSMessage *message,
 			goto cleanup;
 		}
 
-		jnumber_get_i32(channelObj, &channel);
+		int channel_val = 0;
+		jnumber_get_i32(channelObj, &channel_val);
+
+		/* validate before the int is converted to the guint32 parameter:
+		 * a negative JSON value would otherwise wrap to a huge channel */
+		if (channel_val < 1 || channel_val > 165)
+		{
+			goto invalid_params;
+		}
+
+		channel = (guint32) channel_val;
 
 		if (!connman_technology_set_tethering_channel(
 		            connman_manager_find_wifi_technology(manager), channel))
@@ -756,7 +823,11 @@ static bool handle_set_state_command(LSHandle *sh, LSMessage *message,
 
 	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("enabled"), &enabledObj))
 	{
-		jboolean_get(enabledObj, (bool *) &enable_tethering);
+		/* don't write a 1-byte bool through a pointer into the wider
+		 * gboolean */
+		bool enabled_val = false;
+		jboolean_get(enabledObj, &enabled_val);
+		enable_tethering = enabled_val;
 
 		if (enable_tethering && is_wifi_tethering())
 		{
@@ -780,20 +851,24 @@ static bool handle_set_state_command(LSHandle *sh, LSMessage *message,
 		goto invalid_params;
 	}
 
-	if (state_set && !set_wifi_tethering(enable_tethering, message))
+	if (state_set)
 	{
-		if (enable_tethering)
+		if (!set_wifi_tethering(enable_tethering, message))
 		{
-			LSMessageReplyCustomError(sh, message, "Failed to enable tethering mode",
-			                          WCA_API_ERROR_TETHERING_ENABLE_FAILED);
-		}
-		else
-		{
-			LSMessageReplyCustomError(sh, message, "Failed to disable tethering mode",
-			                          WCA_API_ERROR_TETHERING_DISABLE_FAILED);
+			if (enable_tethering)
+			{
+				LSMessageReplyCustomError(sh, message, "Failed to enable tethering mode",
+				                          WCA_API_ERROR_TETHERING_ENABLE_FAILED);
+			}
+			else
+			{
+				LSMessageReplyCustomError(sh, message, "Failed to disable tethering mode",
+				                          WCA_API_ERROR_TETHERING_DISABLE_FAILED);
+			}
 		}
 
-		goto cleanup;
+		/* on success the support-library callback sends the reply -
+		 * replying here as well would answer the message twice */
 	}
 	else
 	{
@@ -808,6 +883,7 @@ invalid_params:
 cleanup:
 	g_free(ssid);
 	g_free(passphrase);
+	g_free(ipAddress);
 	j_release(&parsedObj);
 	return true;
 }
