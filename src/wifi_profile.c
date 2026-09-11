@@ -57,7 +57,7 @@ wifi_profile_t *get_profile_by_id(guint profile_id)
  * @brief Lookup wifi profile with given ssid
  */
 
-wifi_profile_t *get_profile_by_ssid(gchar *ssid)
+wifi_profile_t *get_profile_by_ssid(const gchar *ssid)
 {
 	if (NULL == ssid)
 	{
@@ -83,7 +83,7 @@ wifi_profile_t *get_profile_by_ssid(gchar *ssid)
  * @brief Lookup wifi profile with given ssid and security
  */
 
-wifi_profile_t *get_profile_by_ssid_security(gchar *ssid,  gchar *security)
+wifi_profile_t *get_profile_by_ssid_security(const gchar *ssid, const gchar *security)
 {
 	if (NULL == ssid)
 	{
@@ -123,7 +123,7 @@ wifi_profile_t *get_profile_by_ssid_security(gchar *ssid,  gchar *security)
  * For open networks we only need to add its ssid and generate a profile ID
  * However more fields to be added when supporting secured wifi networks.
  */
-wifi_profile_t *create_new_profile(gchar *ssid, GStrv security, gboolean hidden,
+wifi_profile_t *create_new_profile(const gchar *ssid, GStrv security, gboolean hidden,
                                    gboolean configured)
 {
 	if (NULL == ssid)
@@ -148,7 +148,7 @@ wifi_profile_t *create_new_profile(gchar *ssid, GStrv security, gboolean hidden,
 	if (NULL != security)
 	{
 		gsize i, num_elems = g_strv_length(security);
-		new_profile->security = (GStrv) g_new0(GStrv, num_elems + 1);
+		new_profile->security = g_new0(gchar *, num_elems + 1);
 
 		for (i = 0; i < num_elems; i++)
 		{
@@ -187,7 +187,7 @@ void delete_profile(wifi_profile_t *profile)
 
 	WCALOG_DEBUG("Delete profile %s", profile->ssid);
 
-	if (profile->configured)
+	if (profile->configured && NULL != profile->security)
 	{
 		remove_network_config(profile->ssid, profile->security[0]);
 	}
@@ -195,7 +195,6 @@ void delete_profile(wifi_profile_t *profile)
 	g_free(profile->ssid);
 	g_strfreev(profile->security);
 	g_free(profile);
-	profile = NULL;
 	store_wifi_setting(WIFI_PROFILELIST_SETTING, NULL);
 }
 
