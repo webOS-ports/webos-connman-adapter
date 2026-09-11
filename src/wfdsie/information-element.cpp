@@ -107,19 +107,47 @@ InformationElement::InformationElement(): length_(0) {}
 
 InformationElement::InformationElement(InformationElementArray* array)
 {
-    uint pos = 0;
-    length_ = array->length;
+    size_t pos = 0;
+    length_ = 0;
 
-    while (length_ >= pos + 2) {
-        SubelementId id = (SubelementId)array->bytes[pos];
-        size_t subelement_size = SubelementSizearray[id];
+    /* The bytes come from over-the-air WFD IEs: every field is untrusted.
+     * Each subelement starts with a 1-byte id and a 2-byte big-endian
+     * length; validate the id, both lengths and every copy against the
+     * received buffer, and track length_ as the sum of what was actually
+     * stored so serialize() can never overrun its allocation. */
+    while (array->length >= pos + 3) {
+        uint8_t id_byte = array->bytes[pos];
+        size_t declared = ((size_t)array->bytes[pos + 1] << 8) |
+                          array->bytes[pos + 2];
+        size_t avail = array->length - pos;
 
-        Subelement *element = new_subelement(id);
-        if (element) {
-            memcpy (element, array->bytes + pos, subelement_size);
-            subelements_[id] = element;
+        if (3 + declared > avail) {
+            /* truncated or corrupt IE, stop parsing */
+            break;
         }
-        pos += subelement_size;
+
+        if (id_byte <= ALTERNATIVE_MAC) {
+            SubelementId id = (SubelementId)id_byte;
+            size_t subelement_size = SubelementSizearray[id];
+
+            if (subelement_size <= avail && subelement_size <= 3 + declared) {
+                Subelement *element = new_subelement(id);
+                if (element) {
+                    memcpy (element, array->bytes + pos, subelement_size);
+
+                    if (subelements_.count(id) && subelements_[id]) {
+                        delete_subelement(subelements_[id]);
+                        length_ -= SubelementSizearray[id];
+                    }
+
+                    subelements_[id] = element;
+                    length_ += subelement_size;
+                }
+            }
+        }
+
+        /* advance by the declared wire length, never by zero */
+        pos += 3 + declared;
     }
 }
 
@@ -197,9 +225,17 @@ bool InformationElement::is_cp_supported() const
 
 InformationElementArray* InformationElement::serialize () const
 {
-    uint8_t pos = 0;
+    size_t pos = 0;
+    size_t total = 0;
+
+    /* Size the buffer from the stored subelements themselves instead of
+     * trusting length_ (a uint8_t position also wrapped at 256 before). */
+    for (auto it = subelements_.begin(); it != subelements_.end(); it++) {
+        total += SubelementSizearray[(*it).second->id];
+    }
+
     InformationElementArray* array = new InformationElementArray();
-    InitializeArray(array, length_);
+    InitializeArray(array, total);
     for (auto it = subelements_.begin(); it != subelements_.end(); it++) {
         Subelement* element = (*it).second;
         memcpy (array->bytes + pos, element, SubelementSizearray[element->id]);
@@ -217,7 +253,7 @@ std::string InformationElement::to_string() const
 
     for (size_t i = 0; i < array->length; i++) {
         char hex[3];
-        sprintf(hex,"%02X", array->bytes[i]);
+        snprintf(hex, sizeof(hex), "%02X", array->bytes[i]);
         ret += hex;
     }
 
