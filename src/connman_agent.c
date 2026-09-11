@@ -62,8 +62,19 @@ static gboolean request_input_cb(ConnmanInterfaceAgent *interface,
 	else
 	{
 		response = agent->request_input_cb(fields, agent->request_input_data);
-		connman_interface_agent_complete_request_input(agent->interface, invocation,
-		        response);
+
+		/* Completing with a NULL GVariant is a fatal glib error; report a
+		 * proper agent error instead when the handler has no input. */
+		if (response == NULL)
+		{
+			g_dbus_method_invocation_return_dbus_error(invocation,
+			        AGENT_ERROR_CANCELED, "No input available");
+		}
+		else
+		{
+			connman_interface_agent_complete_request_input(agent->interface,
+			        invocation, response);
+		}
 	}
 
 	return TRUE;
@@ -85,6 +96,8 @@ static gboolean report_error_cb(ConnmanInterfaceAgent *interface,
 	else
 	{
 		agent->report_error_cb(error_message, agent->report_error_data);
+		connman_interface_agent_complete_report_error(agent->interface,
+		        invocation);
 	}
 
 	return TRUE;
@@ -108,8 +121,17 @@ static gboolean request_peer_authorization_cb(
 	else
 	{
 		response = agent->request_input_cb(fields, agent->request_input_data);
-		connman_interface_agent_complete_request_peer_authorization(agent->interface,
-								invocation, response);
+
+		if (response == NULL)
+		{
+			g_dbus_method_invocation_return_dbus_error(invocation,
+			        AGENT_ERROR_CANCELED, "No input available");
+		}
+		else
+		{
+			connman_interface_agent_complete_request_peer_authorization(
+			        agent->interface, invocation, response);
+		}
 	}
 
 	return TRUE;

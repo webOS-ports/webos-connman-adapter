@@ -50,6 +50,7 @@
 #define LUNA_METHOD_SETMDNS               "setmDNS"
 #define LUNA_METHOD_GETCOUNTERS           "getServiceCounters"
 #define LUNA_METHOD_RESETCOUNTERS         "resetServiceCounters"
+#define LUNA_METHOD_CHECKINTERNETSTATUS   "checkinternetstatus"
 
 
 enum ipadress_type

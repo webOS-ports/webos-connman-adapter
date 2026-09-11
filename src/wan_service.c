@@ -55,7 +55,11 @@ static void retrieve_wan_context(jvalue_ref context_obj,
 	jvalue_ref ipv4_obj, ipv6_obj, dns_obj, hosts_obj;
 	int i;
 
-	jobject_put(context_obj, J_CSTR_TO_JVAL("name"), jstring_create(service->name));
+	if (service->name)
+	{
+		jobject_put(context_obj, J_CSTR_TO_JVAL("name"),
+		            jstring_create(service->name));
+	}
 	jobject_put(context_obj, J_CSTR_TO_JVAL("connected"),
 	            jboolean_create(connman_service_is_connected(service)));
 	jobject_put(context_obj, J_CSTR_TO_JVAL("onInternet"),
@@ -141,9 +145,12 @@ static void retrieve_wan_context(jvalue_ref context_obj,
 
 	hosts_obj = jarray_create(NULL);
 
-	for (i = 0; i < g_strv_length(service->hostroutes); i++)
+	if (service->hostroutes)
 	{
-		jarray_append(hosts_obj, jstring_create(service->hostroutes[i]));
+		for (i = 0; i < g_strv_length(service->hostroutes); i++)
+		{
+			jarray_append(hosts_obj, jstring_create(service->hostroutes[i]));
+		}
 	}
 
 	jobject_put(context_obj, J_CSTR_TO_JVAL("hosts"), hosts_obj);

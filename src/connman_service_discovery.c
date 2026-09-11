@@ -30,6 +30,10 @@
 
 static ConnmanInterfaceServiceDiscovery *sd = NULL;
 
+static void
+discovery_response_cb(ConnmanInterfaceManager *proxy, const gchar *address,
+                      const gint ref, const GVariant *tlv);
+
 static gboolean get_remote_service_discovery_object(void)
 {
 	if (sd == NULL)
@@ -44,8 +48,14 @@ static gboolean get_remote_service_discovery_object(void)
 
 		if (error)
 		{
+			g_error_free(error);
 			return FALSE;
 		}
+
+		/* Connect exactly once, for the proxy's lifetime: connecting per
+		 * request would deliver every response N times after N requests. */
+		g_signal_connect(G_OBJECT(sd), "discovery-response",
+		                 G_CALLBACK(discovery_response_cb), NULL);
 	}
 
 	return TRUE;
@@ -62,19 +72,20 @@ discovery_response_cb(ConnmanInterfaceManager *proxy, const gchar *address,
 	GVariantIter *iter;
 	guchar byte;
 	g_variant_get((GVariant *)tlv, "ay", &iter);
-	gsize tlvstr_len = g_variant_n_children((GVariant *)tlv) * 3;
+	/* up to 4 chars per byte ("xx" for the first, " xx" after) plus NUL */
+	gsize tlvstr_len = g_variant_n_children((GVariant *)tlv) * 4 + 1;
 	tlvstr = g_new0(gchar, tlvstr_len);
 
 	while (g_variant_iter_loop(iter, "y", &byte))
 	{
 		if (!strlen(tlvstr))
 		{
-			snprintf(tlvstr, tlvstr_len, "0%x", byte);
+			snprintf(tlvstr, tlvstr_len, "%02x", byte);
 		}
 		else
 		{
 			tmpstr = g_strdup(tlvstr);
-			snprintf(tlvstr, tlvstr_len, "%s 0%x", tmpstr, byte);
+			snprintf(tlvstr, tlvstr_len, "%s %02x", tmpstr, byte);
 			g_free(tmpstr);
 		}
 	}
@@ -147,9 +158,6 @@ gboolean connman_service_discovery_request(const connman_service_type type,
 		g_error_free(error);
 		return FALSE;
 	}
-
-	g_signal_connect(G_OBJECT(sd), "discovery-response",
-	                 G_CALLBACK(discovery_response_cb), NULL);
 
 	return TRUE;
 }

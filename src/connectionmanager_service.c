@@ -186,11 +186,14 @@ static void update_connection_status(connman_service_t *connected_service,
 		gsize i;
 		char dns_str[16];
 
-		for (i = 0; i < g_strv_length(connected_service->ipinfo.dns); i++)
+		if (connected_service->ipinfo.dns)
 		{
-			g_snprintf(dns_str, 16, "dns%lu", i + 1);
-			jobject_put(*status, jstring_create(dns_str),
-			            jstring_create(connected_service->ipinfo.dns[i]));
+			for (i = 0; i < g_strv_length(connected_service->ipinfo.dns); i++)
+			{
+				g_snprintf(dns_str, sizeof(dns_str), "dns%" G_GSIZE_FORMAT, i + 1);
+				jobject_put(*status, jstring_create(dns_str),
+				            jstring_create(connected_service->ipinfo.dns[i]));
+			}
 		}
 
 		if (connected_service->ipinfo.domains &&
@@ -680,10 +683,21 @@ static gboolean check_service_for_update(connman_service_t *service,
 static gboolean check_update_is_needed(void)
 {
 	gboolean needed = FALSE;
+	static gboolean offline_mode = FALSE;
 
 	if (!manager)
 	{
 		return FALSE;
+	}
+
+	/* Track offline mode so an OfflineMode change alone (e.g. airplane mode
+	 * toggled while no service state changed yet) reaches subscribers. */
+	gboolean offline_now = !connman_manager_is_manager_available(manager);
+
+	if (offline_now != offline_mode)
+	{
+		offline_mode = offline_now;
+		needed = TRUE;
 	}
 
 	gboolean old_wifi_tethering = wifi_tethering;
@@ -755,7 +769,11 @@ static gboolean check_update_is_needed(void)
 	}
 
 	guint p2p_connected_count_now = connman_manager_get_p2p_connected_service_count(manager->p2p_services);
-	if(p2p_connected_count != p2p_connected_count_now)
+
+	if (p2p_connected_count != p2p_connected_count_now)
+	{
+		needed = TRUE;
+	}
 
 	p2p_connected_count = p2p_connected_count_now;
 
@@ -1458,18 +1476,29 @@ static bool handle_set_ipv6_command(LSHandle *sh, LSMessage *message,
 			{
 				if (!g_strcmp0(ipv6.method, "manual"))
 				{
-					if (ipv6.address == NULL || ipv6.prefix_length == NULL || ipv6.gateway == NULL)
+					if (ipv6.address == NULL || ipv6.prefix_length < 1 ||
+					        ipv6.prefix_length > 128 || ipv6.gateway == NULL)
 						LSMessageReplyCustomError(sh, message,
 						                          "Address, prefix length as well as gateway should be specified for out of range networks",
 						                          WCA_API_ERROR_INVALID_PARAMETERS);
-					else if (change_network_ipv6(profile->ssid, profile->security[0], ipv6.address,
-					                             (const char *)&ipv6.prefix_length, ipv6.gateway))
-					{
-						LSMessageReplySuccess(sh, message);
-					}
 					else
 					{
-						LSMessageReplyErrorUnknown(sh, message);
+						/* change_network_ipv6 expects the prefix length as a
+						 * string (it is stored in the connman config file) */
+						gchar *plen = g_strdup_printf("%d", ipv6.prefix_length);
+
+						if (change_network_ipv6(profile->ssid,
+						                        profile->security ? profile->security[0] : NULL,
+						                        ipv6.address, plen, ipv6.gateway))
+						{
+							LSMessageReplySuccess(sh, message);
+						}
+						else
+						{
+							LSMessageReplyErrorUnknown(sh, message);
+						}
+
+						g_free(plen);
 					}
 				}
 				else if (!g_strcmp0(ipv6.method, "dhcp"))
@@ -1939,7 +1968,8 @@ static void getinfo_add_response(jvalue_ref* reply, bool subscribed)
 		GSList *iter;
 		connman_technology_t *technology = NULL;
 		jvalue_ref interface_obj = jarray_create(NULL);
-		for (iter = manager->technologies ; NULL != iter; iter = iter->next)
+		for (iter = (manager != NULL) ? manager->technologies : NULL;
+		     NULL != iter; iter = iter->next)
 		{
 			technology = (struct connman_technology *)(iter->data);
 			if (!g_strcmp0(technology->type, "ethernet"))
@@ -2273,41 +2303,6 @@ cleanup:
 	return true;
 }
 
-/**
- *  @brief Callback function registered with connman technology whenever any of its properties change
- *
- *  @param data User context data
- *  @param property Name of the property which has changed
- *  @param value Value of the changed property
- */
-
-static void technology_property_changed_callback(gpointer data,
-        const gchar *property, GVariant *value)
-{
-	connman_technology_t *technology = (connman_technology_t *)data;
-	if (NULL == technology)
-	{
-		return;
-	}
-
-	/* Need to send getstatus method to all com.webos.service.connectionmanager subscribers whenever the
-	   "powered" or "connected" state of the technology changes */
-	if (!g_strcmp0(property, "Powered") || !g_strcmp0(property, "Connected"))
-	{
-		if (manager) {
-			connman_service_t *connected_wifi_service = connman_manager_get_connected_service(manager->wifi_services);
-			if (connected_wifi_service)
-				connman_service_set_run_online_check(connected_wifi_service, TRUE);
-		}
-		connectionmanager_send_status_to_subscribers();
-	}
-	else if (!g_strcmp0(property, "Interfaces"))
-	{
-		connectionmanager_send_status_to_subscribers();
-		send_getinfo_to_subscribers();
-	}
-}
-
 static void increment_counter_statistics(connman_service_t *service,
         GVariant *home)
 {
@@ -2386,7 +2381,12 @@ static void counter_registered_callback(gpointer user_data)
 
 }
 
-#define CALCULATE_DIFFERENCE(name) (counter_data_new[type].name? abs(counter_data_new[type].name - counter_data_old[type].name): 0)
+/* The totals are unsigned and re-zeroed each cycle; clamp to 0 instead of
+ * letting an unsigned wrap-around (service reset mid-cycle) become a huge
+ * bogus delta. */
+#define CALCULATE_DIFFERENCE(name) \
+	((counter_data_new[type].name >= counter_data_old[type].name) ? \
+	 (counter_data_new[type].name - counter_data_old[type].name) : 0)
 
 static void append_interface_data_activity(jvalue_ref *interface_stats,
         connman_service_types type)
@@ -2406,7 +2406,7 @@ static void append_interface_data_activity(jvalue_ref *interface_stats,
 	jobject_put(*interface_stats, J_CSTR_TO_JVAL("txErrors"),
 	            jnumber_create_i32(CALCULATE_DIFFERENCE(tx_errors)));
 	jobject_put(*interface_stats, J_CSTR_TO_JVAL("txDropped"),
-	            jnumber_create_i32(CALCULATE_DIFFERENCE(rx_dropped)));
+	            jnumber_create_i32(CALCULATE_DIFFERENCE(tx_dropped)));
 }
 
 static void append_data_activity(jvalue_ref *reply)
@@ -2615,7 +2615,10 @@ static bool handle_set_technology_state_command(LSHandle *sh,
 	bool disabled_set = false;
 	LSError lserror;
 	LSErrorInit(&lserror);
-	unsigned int n;
+	/* jarray_size() returns -1 for an absent array; a signed index keeps the
+	 * comparison signed so the loops are skipped (an unsigned index would
+	 * turn -1 into 4 billion iterations on 32-bit targets). */
+	ssize_t n;
 	bool success = TRUE;
 	bool not_supported = FALSE;
 
@@ -2627,6 +2630,7 @@ static bool handle_set_technology_state_command(LSHandle *sh,
 	if (!enabled_set && !disabled_set)
 	{
 		LSMessageReplyErrorInvalidParams(sh, message);
+		j_release(&parsed_obj);
 		return true;
 	}
 
@@ -3339,6 +3343,7 @@ static LSMethod connectionmanager_methods[] =
 	{ LUNA_METHOD_SETMDNS,              handle_set_mdns_command },
 	{ LUNA_METHOD_GETCOUNTERS,          handle_get_service_counters_command },
 	{ LUNA_METHOD_RESETCOUNTERS,        handle_reset_service_counters_command },
+	{ LUNA_METHOD_CHECKINTERNETSTATUS,  handle_check_internet_status_command },
 	{ },
 };
 
