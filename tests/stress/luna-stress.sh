@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright (c) 2026 Herman van Hazendonk <github.com@herrie.org>
+#
+# SPDX-License-Identifier: Apache-2.0
 # Stress test for webos-connman-adapter, meant to run ON the webOS/LuneOS
 # device (BusyBox sh compatible).
 #
