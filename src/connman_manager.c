@@ -2429,7 +2429,6 @@ void connman_manager_free(connman_manager_t *manager)
 
 	g_free(manager->state);
 	g_free(manager);
-	manager = NULL;
 }
 
 void set_wca_support_connman_update_callbacks(

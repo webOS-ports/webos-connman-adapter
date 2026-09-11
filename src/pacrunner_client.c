@@ -97,5 +97,4 @@ void pacrunner_client_free(pacrunner_client_t *client)
 
 	g_object_unref(client->remote);
 	g_free(client);
-	client = NULL;
 }
