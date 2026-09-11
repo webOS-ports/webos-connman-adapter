@@ -19,7 +19,7 @@
 #
 
 
-cmake_minimum_required(VERSION 2.8.7)
+cmake_minimum_required(VERSION 3.10)
 
 project(webos-connman-adapter C)
 
@@ -79,6 +79,38 @@ webos_add_compiler_flags(ALL -Wall -g)
 
 webos_add_linker_options(ALL --no-undefined)
 
+# --- Testing & hardening options -------------------------------------------
+
+# Treat warnings as errors (useful in CI; off by default so new toolchains
+# with new diagnostics don't break existing builds).
+set(ENABLE_WERROR FALSE CACHE BOOL "Treat compiler warnings as errors")
+if (ENABLE_WERROR)
+	webos_add_compiler_flags(ALL -Werror)
+endif()
+
+# Address/undefined sanitizers for development builds (host or on-target
+# debugging). Not for production images.
+set(ENABLE_SANITIZERS FALSE CACHE BOOL "Build with AddressSanitizer and UBSan")
+if (ENABLE_SANITIZERS)
+	webos_add_compiler_flags(ALL -fsanitize=address,undefined
+	                             -fno-omit-frame-pointer -O1)
+	string(APPEND CMAKE_EXE_LINKER_FLAGS " -fsanitize=address,undefined")
+endif()
+
+# Baseline hardening for builds whose toolchain does not already inject the
+# distro hardening flags (OE/Yocto passes its own via CFLAGS; these guards
+# avoid duplicating them there).
+if (NOT CMAKE_C_FLAGS MATCHES "-fstack-protector")
+	webos_add_compiler_flags(ALL -fstack-protector-strong)
+endif()
+if (NOT CMAKE_C_FLAGS MATCHES "FORTIFY_SOURCE" AND CMAKE_BUILD_TYPE MATCHES "Rel")
+	webos_add_compiler_flags(ALL -D_FORTIFY_SOURCE=2)
+endif()
+
+enable_testing()
+
+# ----------------------------------------------------------------------------
+
 set(GDBUS_IF_DIR ${WEBOS_BINARY_CONFIGURED_DIR}/src)
 
 file (MAKE_DIRECTORY ${GDBUS_IF_DIR})
@@ -123,7 +155,10 @@ include_directories(src ${GDBUS_IF_DIR})
 webos_configure_header_files(src)
 
 add_subdirectory(src/wfdsie)
-file(GLOB SOURCE_FILES
+# plain set() instead of file(GLOB): no wildcards are used, and GLOB
+# silently dropped missing files (src/state_recovery.c was listed here for
+# years without existing)
+set(SOURCE_FILES
     src/common.c
     src/connectionmanager_service.c
     src/connman_agent.c
@@ -146,7 +181,6 @@ file(GLOB SOURCE_FILES
     src/wifi_ap_info.c
     src/wifi_setting.c
     src/wifi_scan.c
-    src/state_recovery.c
     ${GDBUS_IF_DIR}/connman-interface.c
     ${GDBUS_IF_DIR}/pacrunner-interface.c)
 
