@@ -127,7 +127,7 @@ gboolean connman_group_invite_peer(connman_group_t *group,
  * @param val Value of the updated property.
  */
 
-static void __connman_group_update_property(connman_group_t *group,
+static void connman_group_update_property_internal(connman_group_t *group,
         const gchar *name, GVariant *val)
 {
 	if (!g_strcmp0(name, "Name"))
@@ -206,7 +206,7 @@ gboolean connman_group_get_local_address(connman_group_t *group)
 
 		if (!g_strcmp0(key, "LocalAddress"))
 		{
-			__connman_group_update_property(group, key, val);
+			connman_group_update_property_internal(group, key, val);
 		}
 
 		g_variant_unref(property);
@@ -224,7 +224,7 @@ static void property_changed_cb(ConnmanInterfaceTechnology *proxy,
                                 GVariant *v, connman_group_t *group)
 {
 	GVariant *va = g_variant_get_child_value(v, 0);
-	__connman_group_update_property(group, property, va);
+	connman_group_update_property_internal(group, property, va);
 
 	if (connman_update_callbacks->group_property_changed)
 	{
@@ -323,7 +323,7 @@ connman_group_t *connman_group_new(GVariant *variant)
 		GVariant *val = g_variant_get_variant(val_v);
 		const gchar *key = g_variant_get_string(key_v, NULL);
 
-		__connman_group_update_property(group, key, val);
+		connman_group_update_property_internal(group, key, val);
 
 		g_variant_unref(property);
 		g_variant_unref(key_v);

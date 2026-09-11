@@ -96,7 +96,9 @@ static gboolean usage_cb(ConnmanInterfaceAgent *interface,
 		counter->usage_cb(path, home, roaming, counter->usage_data);
 	}
 
-	g_object_unref(invocation);
+	/* Reply (this consumes the invocation) instead of dropping it:
+	 * connman's Usage call would otherwise never complete. */
+	g_dbus_method_invocation_return_value(invocation, NULL);
 	return TRUE;
 }
 
@@ -104,7 +106,7 @@ static gboolean release_cb(ConnmanInterfaceAgent *interface,
                            GDBusMethodInvocation *invocation,
                            gpointer user_data)
 {
-	g_object_unref(invocation);
+	g_dbus_method_invocation_return_value(invocation, NULL);
 	return TRUE;
 }
 

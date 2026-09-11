@@ -162,6 +162,9 @@ typedef struct connman_service
 	gboolean hidden;
 	gboolean online;
 	gboolean online_checking;
+	/* Set when connman_service_free was deferred because an async connect
+	 * was in flight; the connect callback performs the free. */
+	gboolean pending_free;
 	/* connman's online check hit a captive portal on this service and asked
 	 * for a browser (agent RequestBrowser); only meaningful in "ready" state */
 	gboolean captive_portal;

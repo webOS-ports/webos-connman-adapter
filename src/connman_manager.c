@@ -29,7 +29,12 @@
 #include "wfdsie/wfdinfoelemwrapper.h"
 
 
-wca_support_connman_update_callbacks *connman_update_callbacks = { { NULL } };
+/* Point at a valid all-NULL struct by default: every user dereferences
+ * connman_update_callbacks->some_callback without a NULL check, so the
+ * pointer must never be NULL (the old brace initializer only set the
+ * pointer itself to NULL). */
+static wca_support_connman_update_callbacks null_update_callbacks;
+wca_support_connman_update_callbacks *connman_update_callbacks = &null_update_callbacks;
 
 /*Default UPnP service version is maintained as 10
 as no input is available via luna command*/
@@ -559,7 +564,11 @@ static connman_service_t* update_or_add_service(connman_manager_t *manager,
 			if(service_v != NULL)
 			{
 				service = connman_service_new(service_v, peer_service);
-				add_service_to_list(manager, service, saved);
+
+				if (NULL != service)
+				{
+					add_service_to_list(manager, service, saved);
+				}
 			}
 		}
 	}
@@ -1141,8 +1150,12 @@ static gboolean connman_manager_add_groups(connman_manager_t *manager)
 		if (!find_group_by_path(manager, path))
 		{
 			group = connman_group_new(group_v);
-			manager->groups = g_slist_append(manager->groups, group);
-			connman_manager_populate_group_peers(manager, group);
+
+			if (NULL != group)
+			{
+				manager->groups = g_slist_append(manager->groups, group);
+				connman_manager_populate_group_peers(manager, group);
+			}
 		}
 
 		g_variant_unref(group_v);
@@ -1357,15 +1370,21 @@ gboolean connman_manager_set_wol_wowl_mode(connman_manager_t *manager, gboolean 
 	return TRUE;
 }
 
+#ifdef ENABLE_QUICK_WOL
 static void enable_wol_status_for_quick_power_off_cb(bool success, void *user_data)
 {
-	WCALOG_INFO(MSGID_STATE_RECOVERY_INFO, 0, "Success in enabling wol status in quick power off case");
+	WCALOG_INFO(MSGID_STATE_RECOVERY_INFO, 0,
+	            "%s enabling wol status in quick power off case",
+	            success ? "Success in" : "Failure in");
 }
 
 static void disable_wol_status_for_quick_power_off_cb(bool success, void *user_data)
 {
-	WCALOG_INFO(MSGID_STATE_RECOVERY_INFO, 0, "Success in disabling wol status in quick power off case");
+	WCALOG_INFO(MSGID_STATE_RECOVERY_INFO, 0,
+	            "%s disabling wol status in quick power off case",
+	            success ? "Success in" : "Failure in");
 }
+#endif
 
 /**
  * Update manager's state by making remote call for get_properties
@@ -1890,8 +1909,13 @@ property_changed_cb(ConnmanInterfaceManager *proxy, const gchar *property,
                     connman_manager_t      *manager)
 {
 	GVariant *va = g_variant_get_child_value(v, 0);
-	WCALOG_DEBUG("Manager property %s changed : %s", property,
-	             g_variant_get_string(va, NULL));
+	/* Not every property is a string (OfflineMode is a boolean);
+	 * g_variant_print handles any type. */
+	{
+		gchar *va_str = g_variant_print(va, FALSE);
+		WCALOG_DEBUG("Manager property %s changed : %s", property, va_str);
+		g_free(va_str);
+	}
 
 	if (!g_strcmp0(property, "State"))
 	{
@@ -1971,7 +1995,7 @@ technology_removed_cb(ConnmanInterfaceManager *proxy, gchar *path,
 
 	if (NULL != technology)
 	{
-		manager->technologies = g_slist_remove_link(manager->technologies,
+		manager->technologies = g_slist_delete_link(manager->technologies,
 		                        g_slist_find(manager->technologies, technology));
 		connman_technology_free(technology);
 	}
@@ -2001,10 +2025,15 @@ group_added_cb(ConnmanInterfaceManager *proxy, gchar *path, GVariant *v,
 	{
 		GVariant *group_v = g_variant_new("(o@a{sv})", path, v);
 		connman_group_t *group = connman_group_new(group_v);
-		connman_manager_populate_group_peers(manager, group);
-		WCALOG_DEBUG("Updating manager's group list");
-		manager->groups = g_slist_append(manager->groups, group);
-		connectionmanager_send_status_to_subscribers();
+
+		if (NULL != group)
+		{
+			connman_manager_populate_group_peers(manager, group);
+			WCALOG_DEBUG("Updating manager's group list");
+			manager->groups = g_slist_append(manager->groups, group);
+			connectionmanager_send_status_to_subscribers();
+		}
+
 		g_variant_unref(group_v);
 	}
 
@@ -2033,7 +2062,7 @@ group_removed_cb(ConnmanInterfaceManager *proxy, gchar *path,
 
 	if (NULL != group)
 	{
-		manager->groups = g_slist_remove_link(manager->groups,
+		manager->groups = g_slist_delete_link(manager->groups,
 		                                      g_slist_find(manager->groups, group));
 		connman_group_free(group, NULL);
 	}
@@ -2214,7 +2243,7 @@ gboolean connman_manager_register_agent(connman_manager_t *manager,
 gboolean connman_manager_unregister_agent(connman_manager_t *manager,
         const gchar *path)
 {
-	GError *error;
+	GError *error = NULL;
 
 	if (NULL == manager)
 	{
