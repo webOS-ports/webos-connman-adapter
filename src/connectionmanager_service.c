@@ -809,7 +809,10 @@ static gboolean check_update_is_needed(void)
 
 	wan_connected = new_wan_connected;
 
-	WCALOG_INFO(MSGID_CONNECTION_INFO, 0, "needed: %d",needed);
+	/* Debug, not info: this runs on every candidate status change, including
+	 * the many that turn out to need no broadcast, and at info level it was
+	 * the single noisiest line in the journal while WiFi flapped. */
+	WCALOG_DEBUG("connectionmanager status update needed: %d", needed);
 
 	return needed;
 }
