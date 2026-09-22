@@ -905,6 +905,8 @@ static bool handle_set_state_command(LSHandle *sh, LSMessage *message,
         int lock_result = pthread_mutex_lock(&callback_sequence_lock);
         if (lock_result != 0)
         {
+           /* never leave the luna call unanswered */
+           LSMessageReplyErrorUnknown(sh, message);
            goto cleanup;
         }
 	group_added_by_p2p_request = FALSE;
@@ -1307,7 +1309,7 @@ static bool handle_get_peers_command(LSHandle *sh, LSMessage *message,
 	{
 		LSMessageReplyCustomErrorWithSubscription(sh, message, "P2P is not enabled",
 		        WCA_API_ERROR_P2P_DISABLED, subscribed);
-		return true;
+		goto cleanup;
 	}
 
 	if (subscribed && scan)
@@ -1316,7 +1318,7 @@ static bool handle_get_peers_command(LSHandle *sh, LSMessage *message,
 		{
 			LSMessageReplyCustomErrorWithSubscription(sh, message,
 			        "Error in scanning network", WCA_API_ERROR_SCANNING, subscribed);
-			return true;
+			goto cleanup;
 		}
 	}
 
@@ -1505,6 +1507,7 @@ static bool handle_connect_command(LSHandle *sh, LSMessage *message,
                 int lock_result = pthread_mutex_lock(&callback_sequence_lock);
                 if(lock_result!=0)
                 {
+                    connection_settings_free(settings);
                     goto cleanup;
                 }
 
@@ -1525,15 +1528,27 @@ static bool handle_connect_command(LSHandle *sh, LSMessage *message,
 	{
 		LSMessageReplyCustomError(sh, message, "Peer still in association state",
 		                          WCA_API_ERROR_PEER_IN_ASSOC);
-		goto cleanup;
+		goto settings_cleanup;
 	}
 
 	service_req = luna_service_request_new(sh, message);
 
 	if (!connman_peer_connect(service, service_connect_callback, service_req))
 	{
+		luna_service_request_free(service_req);
 		LSMessageReplyErrorUnknown(sh, message);
-		goto cleanup;
+		goto settings_cleanup;
+	}
+
+	goto cleanup;
+
+settings_cleanup:
+	/* the settings may have just been registered as the agent's
+	 * request-input data; unregister before freeing */
+	if (settings)
+	{
+		connman_agent_set_request_input_callback(agent, NULL, NULL);
+		connection_settings_free(settings);
 	}
 
 cleanup:
@@ -1848,6 +1863,12 @@ static bool handle_create_group_command(LSHandle *sh, LSMessage *message,
 		goto cleanup;
 	}
 
+	if (NULL == passphrase)
+	{
+		LSMessageReplyErrorInvalidParams(sh, message);
+		goto cleanup;
+	}
+
 	passphrase_length = strlen(passphrase);
 
 	if (passphrase_length < 8 || passphrase_length > 63)
@@ -2062,7 +2083,7 @@ static bool handle_get_groups_command(LSHandle *sh, LSMessage *message,
 	{
 		LSMessageReplyCustomErrorWithSubscription(sh, message, "P2P is not enabled",
 		        WCA_API_ERROR_P2P_DISABLED, subscribed);
-		return true;
+		goto cleanup;
 	}
 
 	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
@@ -2726,7 +2747,7 @@ static bool handle_set_wifidisplay_info_command(LSHandle *sh,
 	wfdinfoelem_add_subelement(infoelem, newsubElement);
 	array = wfdinfoelem_serialize(infoelem);
 
-	if(technology->wfd & enabled)
+	if(technology->wfd && enabled)
 	{
 
 		if(technology->wfd == enabled && technology->wfd_sessionavail == sessionAvailable
@@ -4060,7 +4081,7 @@ static bool new_device_name_cb(LSHandle *sh, LSMessage *message, void *ctx)
 {
 	connman_technology_t *p2p_tech = connman_manager_find_p2p_technology(manager);
 
-	if (!connman_manager_is_manager_available(manager) && !p2p_tech)
+	if (!connman_manager_is_manager_available(manager) || !p2p_tech)
 	{
 		return true;
 	}

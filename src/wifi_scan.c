@@ -26,6 +26,7 @@
 #include "utils.h"
 #include "wifi_p2p_service.h"
 #include "common.h"
+#include "connman_common.h"
 
 #define MIN_SCAN_INTERVAL 1000
 
@@ -108,11 +109,35 @@ void scan_done_callback(gpointer user_data)
 	}
 }
 
+/**
+ * Run an "iw" command without going through a shell so that no argument can
+ * be interpreted by one (the SSIDs handed to wifi_scan_now_with_option come
+ * straight from the luna payload).
+ */
+static gboolean run_iw_command(gchar **argv)
+{
+	GError *error = NULL;
+	gint wait_status = 0;
+
+	if (!g_spawn_sync(NULL, argv, NULL,
+	                  G_SPAWN_SEARCH_PATH | G_SPAWN_STDOUT_TO_DEV_NULL |
+	                  G_SPAWN_STDERR_TO_DEV_NULL,
+	                  NULL, NULL, NULL, NULL, &wait_status, &error))
+	{
+		WCALOG_ERROR(MSGID_WIFI_SCAN_IW_FAILED, 0, "Failed to run iw: %s",
+		             error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	return g_spawn_check_wait_status(wait_status, NULL);
+}
+
 gboolean wifi_scan_now_p2p(void)
 {
 	gboolean result;
 
-	if (scan_running && scan_is_p2p || is_connected_peer())
+	if ((scan_running && scan_is_p2p) || is_connected_peer())
 	{
 		result = true;
 	}
@@ -162,7 +187,8 @@ gboolean wifi_scan_now(void)
 	else if (is_wifi_tethering())
 	{
 		WCALOG_DEBUG("wifi_scan: Scanning wifi in tethering status");
-		system("iw dev wlan0 scan");
+		gchar *scan_argv[] = { "iw", "dev", CONNMAN_WIFI_INTERFACE_NAME, "scan", NULL };
+		(void)run_iw_command(scan_argv);
 		scan_running = false;
 		regular_scan_pending = false;
 		scan_time = g_get_monotonic_time() / 1000;
@@ -246,6 +272,13 @@ gboolean wifi_scan_add_interval(const char* source, guint interval_ms)
 		WCALOG_ERROR(MSGID_WIFI_SCAN_ADD_INTERVAL_INVALID_PARAMS, 0,
 		             "wifi_scan: Add scan interval: invalid parameters");
 		return false;
+	}
+
+	/* Clamp tiny intervals: a caller-supplied value of a few ms would
+	 * otherwise turn the scan timer into a busy loop. */
+	if (interval_ms < MIN_SCAN_INTERVAL)
+	{
+		interval_ms = MIN_SCAN_INTERVAL;
 	}
 
 	if (scan_subscribers == NULL)
@@ -398,8 +431,18 @@ void wifi_scan_stop(void)
 
 	scan_running = FALSE;
 
-	scan_done_callback_fn = NULL;
-	scan_done_callback_data = NULL;
+	/* Fire any pending done-callback instead of dropping it: a waiter such
+	 * as a deferred connect would otherwise hang forever and block all
+	 * further connect requests. */
+	if (scan_done_callback_fn)
+	{
+		wifi_scan_callback_t fn = scan_done_callback_fn;
+		gpointer data = scan_done_callback_data;
+		scan_done_callback_fn = NULL;
+		scan_done_callback_data = NULL;
+
+		fn(data);
+	}
 }
 
 void wifi_scan_start(connman_technology_t* _wifi_tech)
@@ -432,59 +475,54 @@ gboolean wifi_scan_now_with_option(const GStrv ssid, const int *freq, const int 
 		return false;
 	}
 
-	gsize i;
-	gsize ssid_num = g_strv_length(ssid);
+	int i;
+	int ssid_num = ssid ? (int) g_strv_length(ssid) : 0;
 
-	gchar *ssidstr = g_strnfill(32 * (ssid_num + 1), 0);
-	gchar *freqstr = g_strnfill(5 * (ssid_num + 1), 0);
-
-	gchar *basestr = "iw dev wlan0 scan";
-	gchar *command = NULL;
-
-	for (i = 0; i < ssid_num; i++)
+	if (ssid_num <= 0 && freq_num <= 0)
 	{
-		ssidstr = strncat(ssidstr, ssid[i], strlen(ssid[i]));
-
-		if (i < (ssid_num - 1))
-		{
-			ssidstr = strncat(ssidstr, " ", strlen(" "));
-		}
+		return wifi_scan_now();
 	}
 
-	for (i = 0; i < freq_num; i++)
-	{
-		char *frequency = NULL;
-		frequency = g_strdup_printf("%d", freq[i]);
-
-		freqstr = strncat(freqstr, frequency, strlen(frequency));
-
-		if (i < (freq_num - 1))
-		{
-			freqstr = strncat(freqstr, " ", strlen(" "));
-		}
-
-		g_free(frequency);
-	}
+	/* Build an argv vector directly: the SSIDs are untrusted luna input and
+	 * must never pass through a shell. */
+	GPtrArray *argv = g_ptr_array_new_with_free_func(g_free);
+	g_ptr_array_add(argv, g_strdup("iw"));
+	g_ptr_array_add(argv, g_strdup("dev"));
+	g_ptr_array_add(argv, g_strdup(CONNMAN_WIFI_INTERFACE_NAME));
+	g_ptr_array_add(argv, g_strdup("scan"));
 
 	if (ssid_num > 0 && freq_num > 0)
 	{
-		command = g_strdup_printf("%s -u ssid %s freq %s", basestr, ssidstr, freqstr);
-	}
-	else if (ssid_num > 0 && freq_num <= 0)
-	{
-		command = g_strdup_printf("%s ssid %s", basestr, ssidstr);
-	}
-	else if (ssid_num <= 0 && freq_num > 0)
-	{
-		command = g_strdup_printf("%s freq %s", basestr, freqstr);
+		g_ptr_array_add(argv, g_strdup("-u"));
 	}
 
-	WCALOG_DEBUG("wifi_scan: Scanning wifi with %s", command);
-	if(command != NULL)
+	if (ssid_num > 0)
 	{
-		(void)system(command);
-		g_free(command);
+		g_ptr_array_add(argv, g_strdup("ssid"));
+
+		for (i = 0; i < ssid_num; i++)
+		{
+			g_ptr_array_add(argv, g_strdup(ssid[i]));
+		}
 	}
 
-	return true;
+	if (freq_num > 0)
+	{
+		g_ptr_array_add(argv, g_strdup("freq"));
+
+		for (i = 0; i < freq_num; i++)
+		{
+			g_ptr_array_add(argv, g_strdup_printf("%d", freq[i]));
+		}
+	}
+
+	g_ptr_array_add(argv, NULL);
+
+	WCALOG_DEBUG("wifi_scan: Scanning wifi with %d ssids, %d freqs",
+	             ssid_num, freq_num);
+
+	gboolean result = run_iw_command((gchar **) argv->pdata);
+	g_ptr_array_free(argv, TRUE);
+
+	return result;
 }

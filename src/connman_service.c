@@ -251,6 +251,12 @@ static void connect_callback(GDBusConnection *connection, GAsyncResult *res,
 		}
 
 		g_free(cbd);
+
+		if (service->pending_free)
+		{
+			connman_service_free(service, NULL);
+		}
+
 		return;
 	}
 
@@ -333,6 +339,12 @@ static void peer_connect_callback(GDBusConnection *connection, GAsyncResult *res
 		}
 
 		g_free(cbd);
+
+		if (service->pending_free)
+		{
+			connman_service_free(service, NULL);
+		}
+
 		return;
 	}
 
@@ -569,9 +581,10 @@ gboolean connman_service_set_ipv4(connman_service_t *service, ipv4info_t *ipv4)
 
 	GError *error = NULL;
 
+	/* g_variant_new_variant() sinks ipv4_v's floating ref and the call
+	 * consumes the wrapper: no unref of ipv4_v here (it would double-free) */
 	connman_interface_service_call_set_property_sync(service->remote,
 	        "IPv4.Configuration", g_variant_new_variant(ipv4_v), NULL, &error);
-	g_variant_unref(ipv4_v);
 
 	if (error)
 	{
@@ -625,10 +638,9 @@ gboolean connman_service_set_proxy(connman_service_t *service, proxyinfo_t *prox
 	proxyinfo_v = g_variant_builder_end(proxyinfo_b);
 	g_variant_builder_unref(proxyinfo_b);
 
+	/* as in connman_service_set_ipv4: the wrapper owns proxyinfo_v */
 	connman_interface_service_call_set_property_sync(service->remote,
 		        "Proxy.Configuration", g_variant_new_variant(proxyinfo_v), NULL, &error);
-
-	g_variant_unref(proxyinfo_v);
 
 	if (error)
 	{
@@ -1195,23 +1207,44 @@ static void connman_service_set_ip_rule(connman_service_t *service , bool status
 		(NULL != service->interface_name) &&
 		(!is_vlan(service->interface_name)))
 	{
-		char addtable[80] = {0,};
 		WCALOG_DEBUG("connman_service_set_ip_rule %s", service->interface_name);
-		char* find_Id = service->interface_name;
-		find_Id +=3;
+
+		/* The address, gateway and interface name arrive over DBus; validate
+		 * them before they go anywhere near a command line, and never assume
+		 * the interface name has a numeric suffix at offset 3. */
+		if (strlen(service->interface_name) < 4 ||
+		        !is_valid_ipaddress(service->ipinfo.ipv4.address) ||
+		        !is_valid_ipaddress(service->ipinfo.ipv4.gateway))
+		{
+			return;
+		}
+
+		char* find_Id = service->interface_name + 3;
 		int table_Id = 0;
 		int assigned = sscanf(find_Id, "%d", &table_Id);
 		if(assigned > 0)
 		{
+			char addtable[128] = {0,};
 			table_Id = table_Id+10;
-			sprintf(addtable,"ip route %s table %d default via %s", (status) ? "add" : "delete", table_Id , service->ipinfo.ipv4.gateway);
-			system(addtable);
-			char addDestrule[80] = {0,};
-			sprintf(addDestrule,"ip rule %s from  %s/%d table %d", (status) ? "add" : "delete", service->ipinfo.ipv4.address, service->ipinfo.ipv4.prefix_len, table_Id );
-			system(addDestrule);
-			char addSrcrule[80] = {0,};
-			sprintf(addSrcrule,"ip rule %s to %s/%d table %d", (status) ? "add" : "delete", service->ipinfo.ipv4.address, service->ipinfo.ipv4.prefix_len, table_Id );
-			system(addSrcrule);
+			snprintf(addtable, sizeof(addtable), "ip route %s table %d default via %s",
+			         (status) ? "add" : "delete", table_Id, service->ipinfo.ipv4.gateway);
+			if (system(addtable) != 0)
+				WCALOG_DEBUG("connman_service_set_ip_rule: route %s failed",
+				             (status) ? "add" : "delete");
+			char addDestrule[128] = {0,};
+			snprintf(addDestrule, sizeof(addDestrule), "ip rule %s from  %s/%d table %d",
+			         (status) ? "add" : "delete", service->ipinfo.ipv4.address,
+			         service->ipinfo.ipv4.prefix_len, table_Id);
+			if (system(addDestrule) != 0)
+				WCALOG_DEBUG("connman_service_set_ip_rule: from-rule %s failed",
+				             (status) ? "add" : "delete");
+			char addSrcrule[128] = {0,};
+			snprintf(addSrcrule, sizeof(addSrcrule), "ip rule %s to %s/%d table %d",
+			         (status) ? "add" : "delete", service->ipinfo.ipv4.address,
+			         service->ipinfo.ipv4.prefix_len, table_Id);
+			if (system(addSrcrule) != 0)
+				WCALOG_DEBUG("connman_service_set_ip_rule: to-rule %s failed",
+				             (status) ? "add" : "delete");
 			service->iprule_added = status;
 		}
 	}
@@ -1408,7 +1441,7 @@ property_changed_cb(ConnmanInterfaceService *proxy, gchar *property,
 
 				if (length > 17)
 				{
-					WCALOG_ERROR(MSGID_MANAGER_FIELDS_ERROR, 0, "Incorrect bssid length, %lu, truncting", length);
+					WCALOG_ERROR(MSGID_MANAGER_FIELDS_ERROR, 0, "Incorrect bssid length, %" G_GSIZE_FORMAT ", truncating", length);
 				}
 
 				i = g_strlcpy(bss_info.bssid, bss, 18);
@@ -1761,7 +1794,7 @@ static void p2p_parse_wfd_dev_info(unsigned char *wfd_subelems, int len,
 		return;
 
 	//Length field is 6 for WFD Device Information
-	if(wfd_subelems[1] != 0x00 && wfd_subelems[2] != 0x06)
+	if(wfd_subelems[1] != 0x00 || wfd_subelems[2] != 0x06)
 		return;
 
 	peer->wfd_enabled = TRUE;
@@ -1812,15 +1845,20 @@ void connman_service_update_properties(connman_service_t *service,
 		else if (!g_strcmp0(key, "WiFi.SSID") &&
 		         g_variant_is_of_type(val, G_VARIANT_TYPE_BYTESTRING))
 		{
+			/* The bytestring is not NUL-terminated and may contain embedded
+			 * NULs; copy it verbatim (do NOT reuse the property-loop counter
+			 * here - assigning to i skipped the remaining properties). */
 			const gchar *data = g_variant_get_data(val);
 			service->ssid_len = g_variant_get_size(val);
 			g_free(service->ssid);
 			service->ssid = g_new(gchar, service->ssid_len + 1);
-			i = g_strlcpy(service->ssid, data, service->ssid_len + 1);
-			if (i != strlen(data))
+
+			if (data != NULL && service->ssid_len > 0)
 			{
-				WCALOG_ERROR(MSGID_MANAGER_FIELDS_ERROR, 0, "Failed to copy ssid info.");
+				memcpy(service->ssid, data, service->ssid_len);
 			}
+
+			service->ssid[service->ssid_len] = '\0';
 
 			connman_service_update_display_name(service);
 		}
@@ -2016,8 +2054,6 @@ void connman_service_update_properties(connman_service_t *service,
 					WCALOG_DEBUG("P2p wifi display service %s size: %lu", p2p_service_val_string, len);
 					g_free(p2p_service_val_string);
 
-					WCALOG_DEBUG("P2p wifi display service %s size: %ld",
-							g_variant_print (p2p_service_val, TRUE), len);
 					InformationElementArray* widiInfoElemArray =
 							(InformationElementArray*) malloc(sizeof(InformationElementArray));
 					widiInfoElemArray->bytes = (uint8_t*) malloc(sizeof(uint8_t)*len);
@@ -2110,7 +2146,7 @@ void connman_service_update_properties(connman_service_t *service,
 
 					if (length > 17)
 					{
-						WCALOG_ERROR(MSGID_MANAGER_FIELDS_ERROR, 0, "Incorrect bssid length, %lu, truncting", length);
+						WCALOG_ERROR(MSGID_MANAGER_FIELDS_ERROR, 0, "Incorrect bssid length, %" G_GSIZE_FORMAT ", truncating", length);
 					}
 
 					i = g_strlcpy(bss_info.bssid, bss, 18);
@@ -2254,7 +2290,6 @@ connman_service_t *connman_service_new(GVariant *variant, gboolean p2p)
 	}
 
 	g_dbus_proxy_set_default_timeout((GDBusProxy *)service->remote, DBUS_CALL_TIMEOUT);
-	g_dbus_proxy_set_default_timeout((GDBusProxy *)service->remote, DBUS_CALL_TIMEOUT);
 	service->iprule_added = false;
 
 	service->sighandler_id = g_signal_connect_data(G_OBJECT(service->remote),
@@ -2284,7 +2319,10 @@ void connman_service_free(gpointer data, gpointer user_data)
 	if (NULL != service->cancellable)
 	{
 		g_cancellable_cancel(service->cancellable);
-		/* The cancel callback will free service. */
+		/* The connect callback sees the cancelled state and frees the
+		 * service (pending_free); freeing here would leave the in-flight
+		 * callback with a dangling pointer. */
+		service->pending_free = TRUE;
 		return;
 	}
 

@@ -102,25 +102,6 @@ typedef struct profile_info
 static gboolean check_wifi_services_for_updates(void);
 static void remove_service_or_all_other(const gchar *ssid, gboolean others);
 
-static void remove_connected_service()
-{
-	WCALOG_DEBUG("Remove connected_service");
-
-	wifi_profile_t *current_connected_profile = NULL;
-	connman_service_t *connected_service = NULL;
-	connected_service = connman_manager_get_connected_service(manager->wifi_services);
-
-	if (!connected_service)
-		return;
-
-	current_connected_profile = get_profile_by_ssid_security(connected_service->name, connected_service->security[0]);
-
-	if (!current_connected_profile)
-		return;
-
-	connman_service_disconnect(connected_service);
-}
-
 connection_settings_t *connection_settings_new(void)
 {
 	connection_settings_t *settings = NULL;
@@ -130,7 +111,7 @@ connection_settings_t *connection_settings_new(void)
 	return settings;
 }
 
-static void connection_settings_free(connection_settings_t *settings)
+void connection_settings_free(connection_settings_t *settings)
 {
 	g_free(settings->passkey);
 	g_free(settings->ssid);
@@ -157,6 +138,15 @@ static void connect_req_free(luna_service_request_t *request)
 
 		if (settings)
 		{
+			/* The settings may still be registered as the connman agent's
+			 * request-input user data; clear that registration before the
+			 * memory goes away or the next RequestInput from connman would
+			 * use freed memory. */
+			if (agent)
+			{
+				connman_agent_set_request_input_callback(agent, NULL, NULL);
+			}
+
 			connection_settings_free(settings);
 		}
 
@@ -345,7 +335,7 @@ static void add_connected_network_status(jvalue_ref *reply,
 
 			for (i = 0; i < g_strv_length(connected_service->ipinfo.dns); i++)
 			{
-				g_snprintf(dns_str, 16, "dns%lu", i + 1);
+				g_snprintf(dns_str, sizeof(dns_str), "dns%" G_GSIZE_FORMAT, i + 1);
 				jobject_put(ip_info, jstring_create(dns_str),
 				            jstring_create(connected_service->ipinfo.dns[i]));
 			}
@@ -579,10 +569,10 @@ static gboolean delete_profile_if_not_connected(gpointer user_data)
 	connected_service = connman_manager_get_connected_service(
 	        manager->wifi_services);
 
-	if (NULL != connected_service || (connected_service != service))
+	if (NULL == connected_service || connected_service != service)
 	{
 		wifi_profile_t *profile = get_profile_by_ssid_security(service->name,
-		                          service->security[0]);
+		                          service->security ? service->security[0] : NULL);
 
 		if (NULL != profile && (failed_connection_profile_info->profile_id == profile->profile_id))
 		{
@@ -734,7 +724,7 @@ static gboolean handle_failed_connection_request(gpointer user_data)
 		// so in case the connection fails, we should delete the profile and the corresponding config file
 		// Give it 2 sec for service to auto-connect
 		wifi_profile_t *profile = get_profile_by_ssid_security(service->name,
-		                          service->security[0]);
+		                          service->security ? service->security[0] : NULL);
 		if (profile) {
 			WCALOG_DEBUG("profile present for failed connection so delete it after 5sec");
 			profile_info_t* failed_connection_profile_info = g_new0(profile_info_t, 1);
@@ -749,7 +739,7 @@ static gboolean handle_failed_connection_request(gpointer user_data)
 
 	if (settings && settings->store)
 	{
-		store_network_config(settings, service->security[0]);
+		store_network_config(settings, service->security ? service->security[0] : NULL);
 	}
 
 #endif
@@ -1019,7 +1009,7 @@ static bool add_service(connman_service_t *service, jvalue_ref *network,
 			jobject_put(*network, J_CSTR_TO_JVAL("availableSecurityTypes"), security_list);
 		}
 
-		if (service->strength != NULL)
+		if (service->strength > 0)
 		{
 			jobject_put(*network, J_CSTR_TO_JVAL("signalBars"),
 			            jnumber_create_i32(signal_strength_to_bars(service->strength)));
@@ -1129,8 +1119,14 @@ static gboolean find_saved_service_by_profile(wifi_profile_t *profile)
 			continue;
 		}
 
-		if (service->security[0] != NULL &&
+		/* security is NULL for open networks on either side */
+		if (service->security != NULL && profile->security != NULL &&
 		        g_strcmp0(service->security[0], profile->security[0]) != 0)
+		{
+			continue;
+		}
+
+		if ((service->security == NULL) != (profile->security == NULL))
 		{
 			continue;
 		}
@@ -1263,7 +1259,10 @@ GVariant *agent_request_input_callback(GVariant *fields, gpointer data)
 
 	if (!g_variant_is_container(fields))
 	{
-		connection_settings_free(settings);
+		/* settings is owned by the pending connect request (service_data),
+		 * not by this callback: freeing it here would double-free when the
+		 * request is torn down. Just drop the registration. */
+		connman_agent_set_request_input_callback(agent, NULL, NULL);
 		return NULL;
 	}
 
@@ -1369,7 +1368,7 @@ void connect_after_scan_cb(gpointer user_data)
 {
 	connman_technology_t *wifi_tech = connman_manager_find_wifi_technology(manager);
 
-	if (!wifi_tech || !current_connect_req)
+	if (!current_connect_req)
 	{
 		return;
 	}
@@ -1382,7 +1381,16 @@ void connect_after_scan_cb(gpointer user_data)
 		service = service_data->service;
 	}
 
+	/* Reply with an error instead of silently dropping the request: leaving
+	 * current_connect_req pending would wedge every future connect call. */
 	if (!wifi_tech || !service)
+	{
+		goto error;
+	}
+
+	/* The service may have been removed while the scan was running (the AP
+	 * disappeared); the stored pointer would then be dangling. */
+	if (!g_slist_find(manager->wifi_services, service))
 	{
 		goto error;
 	}
@@ -1524,7 +1532,8 @@ static void connect_wifi_with_ssid(const char *ssid, wifi_profile_t *profile,
 
 			if (NULL == service->name)
 			{
-				WCALOG_INFO(MSGID_WIFI_CONNECT_HIDDEN_SERVICE, 0, "");
+				WCALOG_INFO(MSGID_WIFI_CONNECT_HIDDEN_SERVICE, 0,
+			            "Connecting to hidden service");
 			}
 			else
 			{
@@ -1809,6 +1818,13 @@ cleanup:
 
 	if (settings)
 	{
+		/* settings may have been registered as the agent's request-input
+		 * user data above; drop that registration before freeing. */
+		if (agent)
+		{
+			connman_agent_set_request_input_callback(agent, NULL, NULL);
+		}
+
 		connection_settings_free(settings);
 	}
 
@@ -1985,22 +2001,6 @@ void send_findnetworks_status_to_subscribers()
 	j_release(&findnetworks_reply);
 }
 
-static int convert_frequency_to_channel(int freq)
-{
-	if (freq >= 2412 && freq <= 2484)
-	{
-		return (freq - 2412) / 5 + 1;
-	}
-	else if (freq >= 5170 && freq <= 5825)
-	{
-		return (freq - 5170) / 5 + 34;
-	}
-	else
-	{
-		return -1;
-	}
-}
-
 static gboolean signal_polling_cb(gpointer user_data)
 {
 	connman_service_t *connected_service = connman_manager_get_connected_service(
@@ -2014,11 +2014,8 @@ static gboolean signal_polling_cb(gpointer user_data)
 		return FALSE;
 	}
 
-	connman_technology_t *wifi_technology = connman_manager_find_wifi_technology(
-	        manager);
-	connman_technology_interface_t interface_properties;
-
-	/*if (connman_technology_get_interface_properties(wifi_technology,
+	/*if (connman_technology_get_interface_properties(
+	        connman_manager_find_wifi_technology(manager),
 	        CONNMAN_WIFI_INTERFACE_NAME, &interface_properties) == TRUE)
 	{
 
@@ -2141,18 +2138,6 @@ static void technology_property_changed_callback(gpointer data,
 			connectionmanager_send_status_to_subscribers();
 			send_getinfo_to_subscribers();
 		}
-	}
-}
-
-static void support_configure_country_code_cb(bool success, void *user_data)
-{
-	if (success)
-	{
-		WCALOG_INFO(MSGID_COUNTRY_CODE_INFO, 0, "Success in setting country code");
-	}
-	else
-	{
-		WCALOG_ERROR(MSGID_COUNTRY_CODE_FAILED, 0, "Failed to set country code");
 	}
 }
 
@@ -2535,19 +2520,19 @@ static bool handle_cancel_command(LSHandle *handle, LSMessage *message,
 	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("dummy"), &profileIdObj))
 	{
 		LSMessageReplyErrorInvalidParams(handle, message);
-		return true;
+		goto cleanup;
 	}
 
 	connman_service_t *connecting_service;
 
 	if (!connman_status_check(manager, handle, message))
 	{
-		return true;
+		goto cleanup;
 	}
 
 	if (!wifi_technology_status_check(handle, message))
 	{
-		return true;
+		goto cleanup;
 	}
 
 	connecting_service = connman_manager_get_connecting_service(
@@ -2557,7 +2542,7 @@ static bool handle_cancel_command(LSHandle *handle, LSMessage *message,
 	{
 		LSMessageReplyCustomError(handle, message, "No service is connecting currently",
 		                          WCA_API_ERROR_NO_SERVICE_CONNECTING);
-		return true;
+		goto cleanup;
 	}
 
 	if (!connman_service_disconnect(connecting_service))
@@ -2565,11 +2550,13 @@ static bool handle_cancel_command(LSHandle *handle, LSMessage *message,
 		LSMessageReplyCustomError(handle, message,
 		                          "Failed to disconnect currently connecting service",
 		                          WCA_API_ERROR_DISCONNECT_FAILED);
-		return true;
+		goto cleanup;
 	}
 
 	LSMessageReplySuccess(handle, message);
 
+cleanup:
+	j_release(&parsedObj);
 	return true;
 }
 
@@ -2593,7 +2580,7 @@ client is subscribed anymore.
 Name | Required | Type | Description
 -----|--------|------|----------
 subscribe | No | Boolean | true to subcribe to changes
-interval | No | Number | Number of seconds to use as scan interval
+interval | No | Number | Number of milliseconds to use as scan interval (minimum 1000)
 
 @par Returns(Call)
 
@@ -2948,6 +2935,13 @@ static bool handle_change_network_command(LSHandle *sh, LSMessage *message,
 		goto cleanup;
 	}
 
+	if (NULL == profile->security)
+	{
+		LSMessageReplyCustomError(sh, message, "Network is not secured",
+		                          WCA_API_ERROR_INVALID_PARAMETERS);
+		goto cleanup;
+	}
+
 	if (!is_valid_wifi_passphrase(passKey, profile->security[0]))
 	{
 		LSMessageReplyCustomError(sh, message,
@@ -2970,7 +2964,7 @@ static bool handle_change_network_command(LSHandle *sh, LSMessage *message,
 			connman_service_t *service = (connman_service_t *)(ap->data);
 
 			if (g_strcmp0(service->name, profile->ssid) ||
-			        check_service_security(service, profile->security[0]))
+			        !check_service_security(service, profile->security[0]))
 			{
 				continue;
 			}
@@ -3237,23 +3231,24 @@ static bool handle_get_profilelist_command(LSHandle *sh, LSMessage *message,
 	}
 
 	jvalue_ref profileIdObj = {0};
+	jvalue_ref reply = NULL;
 	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("dummy"), &profileIdObj))
 	{
 		LSMessageReplyErrorInvalidParams(sh, message);
-		return true;
+		goto early_cleanup;
 	}
 
 	if (!connman_status_check(manager, sh, message))
 	{
-		return true;
+		goto early_cleanup;
 	}
 
 	if (!wifi_technology_status_check(sh, message))
 	{
-		return true;
+		goto early_cleanup;
 	}
 
-	jvalue_ref reply = jobject_create();
+	reply = jobject_create();
 	LSError lserror;
 	LSErrorInit(&lserror);
 	jschema_ref response_schema  = NULL;
@@ -3295,6 +3290,9 @@ cleanup:
 	}
 
 	j_release(&reply);
+
+early_cleanup:
+	j_release(&parsedObj);
 	return true;
 }
 
@@ -3516,21 +3514,27 @@ gint generate_new_wpspin(void)
 
 	//Generate 7 random digits
 	gint pin = 0;
-	int count = 0;
 
-	do
+	/* fread returns the number of items read (never -1); bail out on a
+	 * short read instead of returning a predictable pin of 0. */
+	if (fread(&pin, sizeof(pin), 1, f) != 1)
 	{
-		count = fread(&pin, sizeof(pin), 1, f);
+		fclose(f);
+		return -1;
 	}
-	while(count == -1 || pin < 0);
+
+	if (pin < 0)
+	{
+		pin = -(pin + 1);
+	}
 
 	pin %= 10000000;
 	pin *= 10;
 
-        if(fclose(f)!=0)
-        {
-          WCALOG_DEBUG("Failed_fileClose");
-        }
+	if (fclose(f) != 0)
+	{
+		WCALOG_DEBUG("Failed_fileClose");
+	}
 
 	// Append checksum digit in the end
 
@@ -3595,6 +3599,7 @@ static bool handle_create_wpspin_command(LSHandle *sh, LSMessage *message,
 	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("dummy"), &profileIdObj))
 	{
 		LSMessageReplyErrorInvalidParams(sh, message);
+		j_release(&parsedObj);
 		return true;
 	}
 
@@ -3611,8 +3616,8 @@ static bool handle_create_wpspin_command(LSHandle *sh, LSMessage *message,
 		goto error;
 	}
 
-	char wpspin_str[9];
-	snprintf(wpspin_str, 9, "%08i", wpspin);
+	char wpspin_str[12];
+	snprintf(wpspin_str, sizeof(wpspin_str), "%08i", wpspin);
 
 	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 	jobject_put(reply, J_CSTR_TO_JVAL("wpspin"), jstring_create(wpspin_str));
@@ -3647,6 +3652,7 @@ cleanup:
 	}
 
 	j_release(&reply);
+	j_release(&parsedObj);
 	return true;
 }
 
@@ -3776,17 +3782,17 @@ static bool handle_cancel_wps_command(LSHandle *sh, LSMessage *message,
 	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("dummy"), &profileIdObj))
 	{
 		LSMessageReplyErrorInvalidParams(sh, message);
-		return true;
+		goto cleanup;
 	}
 
 	if (!connman_status_check(manager, sh, message))
 	{
-		return true;
+		goto cleanup;
 	}
 
 	if (!wifi_technology_status_check(sh, message))
 	{
-		return true;
+		goto cleanup;
 	}
 
 	connman_technology_t *technology = connman_manager_find_wifi_technology(
@@ -3796,10 +3802,13 @@ static bool handle_cancel_wps_command(LSHandle *sh, LSMessage *message,
 	{
 		LSMessageReplyCustomError(sh, message, "Error in cancelling WPS connection",
 		                          WCA_API_ERROR_CANCEL_WPS);
-		return true;
+		goto cleanup;
 	}
 
 	LSMessageReplySuccess(sh, message);
+
+cleanup:
+	j_release(&parsedObj);
 	return true;
 }
 
@@ -3818,21 +3827,32 @@ static void handle_luna_subscription_cancel(LSHandle *sh, LSMessage *message, vo
 
 static bool set_country_code(const char* countryCode)
 {
-	FILE *fp = NULL;
-	char *command = NULL;
-	command = g_strdup_printf("iw reg set %s", countryCode);
+	GError *error = NULL;
+	gint wait_status = 0;
 
-	fp = popen(command, "r");
-	if (NULL == fp)
+	/* The country code comes straight from the luna payload: validate it
+	 * strictly (ISO 3166-1 alpha-2) and execute without a shell so it can
+	 * never be interpreted as shell syntax. */
+	if (countryCode == NULL || strlen(countryCode) != 2 ||
+	        !g_ascii_isalpha(countryCode[0]) || !g_ascii_isalpha(countryCode[1]))
 	{
-		g_free(command);
 		return false;
 	}
 
-	g_free(command);
-	pclose(fp);
+	gchar *argv[] = { "iw", "reg", "set", (gchar *) countryCode, NULL };
 
-	return true;
+	if (!g_spawn_sync(NULL, argv, NULL,
+	                  G_SPAWN_SEARCH_PATH | G_SPAWN_STDOUT_TO_DEV_NULL |
+	                  G_SPAWN_STDERR_TO_DEV_NULL,
+	                  NULL, NULL, NULL, NULL, &wait_status, &error))
+	{
+		WCALOG_ERROR(MSGID_WIFI_SCAN_IW_FAILED, 0, "Failed to run iw: %s",
+		             error->message);
+		g_error_free(error);
+		return false;
+	}
+
+	return g_spawn_check_wait_status(wait_status, NULL);
 }
 
 //->Start of API documentation comment block
@@ -3905,6 +3925,7 @@ static bool handle_set_country_code_command(LSHandle *sh,
 		LSMessageReplyCustomError(sh, message,
 		                          "Error in setting WiFi country code",
 		                          WCA_API_ERROR_WIFI_SET_COUNTRY_CODE_FAILED);
+		goto cleanup;
 	}
 
 	LSMessageReplySuccess(sh, message);
@@ -3917,7 +3938,7 @@ cleanup:
 static bool get_country_code()
 {
 	FILE *fp = NULL;
-	char countryCodeBuff[MAX_COUNTRY_CODE_LENGTH];
+	char countryCodeBuff[MAX_COUNTRY_CODE_LENGTH] = {0};
 	size_t readSize = 0;
 	char *command = NULL;
 	command = g_strdup_printf("iw reg get | awk '/^country/{print $2}' | cut -c 1-2");
@@ -3949,7 +3970,7 @@ static bool get_country_code()
 	if (NULL != technology->country_code)
 		g_free(technology->country_code);
 
-	technology->country_code = g_strndup(countryCodeBuff, MAX_COUNTRY_CODE_LENGTH);
+	technology->country_code = g_strndup(countryCodeBuff, readSize);
 
 	pclose(fp);
 	g_free(command);
@@ -4002,17 +4023,17 @@ static bool handle_get_country_code_command(LSHandle *sh,
 	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("dummy"), &profileIdObj))
 	{
 		LSMessageReplyErrorInvalidParams(sh, message);
-		return true;
+		goto early_cleanup;
 	}
 
 	if (!connman_status_check(manager, sh, message))
 	{
-		return true;
+		goto early_cleanup;
 	}
 
 	if (!wifi_technology_status_check(sh, message))
 	{
-		return true;
+		goto early_cleanup;
 	}
 
 	jvalue_ref reply = jobject_create();
@@ -4023,9 +4044,8 @@ static bool handle_get_country_code_command(LSHandle *sh,
 	                                       manager);
 	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
 
-
-
-	if (get_country_code() && NULL != technology->country_code)
+	if (NULL != technology && get_country_code() &&
+	        NULL != technology->country_code)
 	{
 		jobject_put(reply, J_CSTR_TO_JVAL("countryCode"),
 				jstring_create(technology->country_code));
@@ -4058,6 +4078,9 @@ cleanup:
 	}
 
 	j_release(&reply);
+
+early_cleanup:
+	j_release(&parsedObj);
 	return true;
 }
 
@@ -4292,8 +4315,6 @@ int initialize_wifi_ls2_calls(GMainLoop *mainloop , LSHandle **wifi_handle)
 		WCALOG_ESCAPED_ERRMSG(MSGID_WIFI_SUBSCRIPTIONCANCEL_LUNA_ERROR, lserror.message);
 		goto Exit;
 	}
-
-	g_type_init();
 
 	g_bus_watch_name(G_BUS_TYPE_SYSTEM, "net.connman",
 	                 G_BUS_NAME_WATCHER_FLAGS_NONE, connman_service_started, (GBusNameVanishedCallback) connman_service_stopped,

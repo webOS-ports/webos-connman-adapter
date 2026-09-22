@@ -36,10 +36,10 @@ typedef struct wifi_profile
 
 extern void init_wifi_profile_list(void);
 extern wifi_profile_t *get_profile_by_id(guint profile_id);
-extern wifi_profile_t *get_profile_by_ssid(gchar *ssid);
-extern wifi_profile_t *get_profile_by_ssid_security(gchar *ssid,
-        gchar *security);
-extern wifi_profile_t *create_new_profile(gchar *ssid, GStrv security,
+extern wifi_profile_t *get_profile_by_ssid(const gchar *ssid);
+extern wifi_profile_t *get_profile_by_ssid_security(const gchar *ssid,
+        const gchar *security);
+extern wifi_profile_t *create_new_profile(const gchar *ssid, GStrv security,
         gboolean hidden, gboolean configured);
 extern void delete_profile(wifi_profile_t *profile);
 extern void delete_all_profiles_except_one(guint id);

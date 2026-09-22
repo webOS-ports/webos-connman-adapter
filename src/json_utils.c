@@ -110,7 +110,7 @@ static char* convert_jobject_to_native_valist(jvalue_ref json, va_list *valist)
 				}
 
 				json_error = jnumber_get_i64(valueObj, &int_value);
-				if (json_error || int_value < 0 || int_value >= (2<<8))
+				if (json_error || int_value < 0 || int_value >= (1<<8))
 				{
 					return g_strdup_printf("Field %s number of out range of uint8", key);
 				}
@@ -124,7 +124,7 @@ static char* convert_jobject_to_native_valist(jvalue_ref json, va_list *valist)
 				}
 
 				json_error = jnumber_get_i64(valueObj, &int_value);
-				if (json_error || int_value < 0 || int_value >= (2<<16))
+				if (json_error || int_value < 0 || int_value >= (1<<16))
 				{
 					return g_strdup_printf("Field %s number of out range of uint16", key);
 				}
@@ -138,7 +138,7 @@ static char* convert_jobject_to_native_valist(jvalue_ref json, va_list *valist)
 				}
 
 				json_error = jnumber_get_i64(valueObj, &int_value);
-				if (json_error || int_value < 0 || int_value >= (((guint64)2)<<32))
+				if (json_error || int_value < 0 || int_value >= (((gint64)1)<<32))
 				{
 					return g_strdup_printf(
 							"Field %s number of out range of uint32",
@@ -298,7 +298,8 @@ char* generate_jobject_from_native_valist(jvalue_ref* result, va_list* valist)
 		{
 			if (!jobject_put(obj, jstring_create(key), sub_obj))
 			{
-				return g_strdup_printf("Not failed to add json object for field %s, invalid joson object?", key);
+				j_release(&obj);
+				return g_strdup_printf("Failed to add json object for field %s, invalid json object?", key);
 			}
 		}
 	}

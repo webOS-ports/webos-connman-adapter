@@ -62,7 +62,10 @@ gboolean connman_technology_set_powered(connman_technology_t *technology,
 		if (g_strcmp0(error->message,
 		              "GDBus.Error:net.connman.Error.NotSupported: Not supported") == 0)
 		{
-			*not_supported = true;
+			if (not_supported)
+			{
+				*not_supported = true;
+			}
 		}
 
 		g_error_free(error);
@@ -657,21 +660,25 @@ gboolean connman_technology_scan_network(connman_technology_t *technology,
 		return FALSE;
 	}
 
-	technology->calls_pending += 1;
 	if (p2p)
 	{
 		connman_technology_t *p2p_tech = connman_manager_find_p2p_technology(manager);
 
+		/* Do not bump calls_pending before this early return: a stale
+		 * increment would keep connman_technology_free deferring forever. */
 		if (!p2p_tech)
 		{
 			return FALSE;
 		}
+
+		technology->calls_pending += 1;
 		connman_interface_technology_call_scan(p2p_tech->remote,
 					NULL, connman_technology_scan_callback,
 					(gpointer)technology);
 	}
 	else
 	{
+		technology->calls_pending += 1;
 		connman_interface_technology_call_scan(technology->remote,
 					NULL, connman_technology_scan_callback,
 					(gpointer)technology);
@@ -1240,8 +1247,11 @@ void connman_technology_free(connman_technology_t *technology)
 	g_free(technology->tethering_identifier);
 	g_free(technology->tethering_passphrase);
 
-	g_object_unref(technology->remote);
-	technology->remote = NULL;
+	if (technology->remote)
+	{
+		g_object_unref(technology->remote);
+		technology->remote = NULL;
+	}
 
 	g_strfreev(technology->interfaces);
 	technology->interfaces = NULL;

@@ -201,6 +201,7 @@ bool LSMessageValidateSchema(LSHandle *sh, LSMessage *message,
 
 	if (jis_null(*parsedObj))
 	{
+		jschema_release(&input_schema);
 		input_schema = jschema_parse(j_cstr_to_buffer(SCHEMA_ANY), DOMOPT_NOOPT, NULL);
 		jschema_info_init(&schemaInfo, input_schema, NULL, NULL);
 		*parsedObj = jdom_parse(j_cstr_to_buffer(LSMessageGetPayload(message)),
@@ -227,7 +228,7 @@ bool LSMessageValidateSchema(LSHandle *sh, LSMessage *message,
 	return ret;
 }
 
-static bool LSMessageParseToNative_valist(LSMessage *message, jvalue_ref *parsedObj, va_list args)
+static bool LSMessageParseToNative_valist(LSMessage *message, jvalue_ref *parsedObj, va_list *args)
 {
 	char* error;
 	JSchemaInfo schemaInfo;
@@ -241,7 +242,7 @@ static bool LSMessageParseToNative_valist(LSMessage *message, jvalue_ref *parsed
 		return false;
 	}
 
-	error = json_convert_to_native_valist(*parsedObj, (va_list *)&args);
+	error = json_convert_to_native_valist(*parsedObj, args);
 
 	if (error)
 	{
@@ -295,7 +296,7 @@ bool LSMessageParseToNative(LSMessage *message,
 	va_list args;
 
 	va_start(args, parsedObj);
-	result = LSMessageParseToNative_valist(message, parsedObj, args);
+	result = LSMessageParseToNative_valist(message, parsedObj, &args);
 	va_end(args);
 
 	return result;
@@ -315,7 +316,7 @@ bool LSMessageParseToNativeWithSubscription(LSMessage *message,
 	va_list args;
 
 	va_start(args, parsedObj);
-	result = LSMessageParseToNative_valist(message, parsedObj, args);
+	result = LSMessageParseToNative_valist(message, parsedObj, &args);
 	va_end(args);
 
 	if (result)
@@ -444,7 +445,9 @@ void LSMessageReplySuccessWithDataNoDuplicates(LSMessage *message, char** previo
 	char* error;
 	va_list args;
 
-	va_start(args, message);
+	/* va_start must name the last named parameter; naming an earlier one is
+	 * undefined behavior and derails the argument parsing on ARM. */
+	va_start(args, previous_reply);
 	error = json_generate_from_native_valist(&replyObj, &args);
 	va_end(args);
 
@@ -464,6 +467,7 @@ void LSMessageReplySuccessWithDataNoDuplicates(LSMessage *message, char** previo
 	if (previous_reply && *previous_reply && g_strcmp0(*previous_reply, reply_string) == 0)
 	{
 		// Duplicate response
+		j_release(&replyObj);
 		return;
 	}
 
