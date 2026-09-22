@@ -842,7 +842,18 @@ static void service_property_changed_callback(gpointer data,
 			case  CONNMAN_SERVICE_STATE_READY:
 			case  CONNMAN_SERVICE_STATE_ONLINE:
 				wifi_send_status_to_subscribers();
-				connman_service_set_autoconnect(service, TRUE);
+
+				/* Only ask connman to mark the service autoconnectable when it is
+				 * not already: a synchronous SetProperty round trip on every
+				 * ready->online transition is pure overhead on a service that
+				 * connman just autoconnected itself, and while the link flaps
+				 * (e.g. a disconnect on every refused suspend attempt) it lands
+				 * dozens of times a minute. */
+				if (!service->auto_connect)
+				{
+					connman_service_set_autoconnect(service, TRUE);
+				}
+
 				break;
 
 			case CONNMAN_SERVICE_STATE_IDLE:
