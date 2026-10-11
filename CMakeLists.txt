@@ -159,6 +159,7 @@ add_subdirectory(src/wfdsie)
 # silently dropped missing files (src/state_recovery.c was listed here for
 # years without existing)
 set(SOURCE_FILES
+    src/bss_info.c
     src/common.c
     src/connectionmanager_service.c
     src/connman_agent.c

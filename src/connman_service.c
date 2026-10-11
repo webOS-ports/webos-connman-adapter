@@ -21,6 +21,7 @@
  *
  */
 
+#include <string.h>
 #include "connman_service.h"
 #include "connman_manager.h"
 #include "utils.h"
@@ -1375,6 +1376,69 @@ static void connman_service_advance_online_state(connman_service_t *service,
  * Callback for service's "property_changed" signal
  */
 
+
+/* Without LG's list of access points, the one connman publishes, as a
+ * one-entry bss (see bss_listed in connman_service.h). Marked changed only
+ * when it is different, as this runs for every service on every update. */
+static void connman_service_update_access_point(connman_service_t *service)
+{
+	if (service->bss_listed)
+	{
+		return;
+	}
+
+	GArray *bss = bss_info_from_access_point(service->ap_bssid[0] ? service->ap_bssid : NULL,
+	                                         service->ap_frequency, service->strength);
+
+	gboolean same = (bss == NULL && service->bss == NULL)
+	                || (bss != NULL && service->bss != NULL && bss->len == service->bss->len
+	                    && memcmp(bss->data, service->bss->data, bss->len * sizeof(bssinfo_t)) == 0);
+	if (same)
+	{
+		if (bss != NULL)
+		{
+			g_array_free(bss, TRUE);
+		}
+		return;
+	}
+
+	if (service->bss != NULL)
+	{
+		g_array_free(service->bss, TRUE);
+	}
+
+	service->bss = bss;
+	connman_service_set_changed(service, CONNMAN_SERVICE_CHANGE_CATEGORY_FINDNETWORKS);
+}
+
+/* Keeps "BSSID" or "Frequency", from connman's patch 0006; false for any
+ * other key. The caller makes the bss from them. */
+static gboolean connman_service_store_access_point(connman_service_t *service,
+                                                   const gchar *key, GVariant *val)
+{
+	if (!g_strcmp0(key, "BSSID"))
+	{
+		if (g_variant_is_of_type(val, G_VARIANT_TYPE_STRING))
+		{
+			g_strlcpy(service->ap_bssid, g_variant_get_string(val, NULL), sizeof(service->ap_bssid));
+		}
+		else
+		{
+			service->ap_bssid[0] = 0;
+		}
+		return TRUE;
+	}
+
+	if (!g_strcmp0(key, "Frequency"))
+	{
+		service->ap_frequency = g_variant_is_of_type(val, G_VARIANT_TYPE_UINT16)
+		                        ? g_variant_get_uint16(val) : 0;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 static void
 property_changed_cb(ConnmanInterfaceService *proxy, gchar *property,
                     GVariant *v,
@@ -1402,10 +1466,16 @@ property_changed_cb(ConnmanInterfaceService *proxy, gchar *property,
 			service->strength = strength;
 			connman_service_set_changed(service,
 			                            CONNMAN_SERVICE_CHANGE_CATEGORY_FINDNETWORKS);
+			connman_service_update_access_point(service);
 		}
+	}
+	else if (connman_service_store_access_point(service, property, va))
+	{
+		connman_service_update_access_point(service);
 	}
 	else if (!g_strcmp0(property, "BSS"))
 	{
+		service->bss_listed = TRUE;
 		if (service->bss != NULL)
 		{
 			g_array_free(service->bss ,TRUE);
@@ -1908,6 +1978,11 @@ void connman_service_update_properties(connman_service_t *service,
 				                            CONNMAN_SERVICE_CHANGE_CATEGORY_FINDNETWORKS);
 			}
 		}
+		else if (connman_service_store_access_point(service, key, val))
+		{
+			/* The one-entry bss is made once after the loop, when Strength
+			 * has been read too, whatever the order. */
+		}
 		else if (!g_strcmp0(key, "Security"))
 		{
 			g_strfreev(service->security);
@@ -2111,6 +2186,7 @@ void connman_service_update_properties(connman_service_t *service,
 		}
 		else if (!g_strcmp0(key, "BSS"))
 		{
+			service->bss_listed = TRUE;
 			if (service->bss != NULL)
 			{
 				g_array_free(service->bss ,TRUE);
@@ -2193,6 +2269,8 @@ void connman_service_update_properties(connman_service_t *service,
 		g_variant_unref(val_v);
 		g_variant_unref(val);
 	}
+
+	connman_service_update_access_point(service);
 }
 
 gboolean connman_service_is_connected(connman_service_t *service)

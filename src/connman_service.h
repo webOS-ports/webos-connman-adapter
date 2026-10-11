@@ -25,6 +25,7 @@
 #define CONNMAN_SERVICE_H_
 
 #include "connman_common.h"
+#include "bss_info.h"
 
 typedef void (*connman_p2p_request_cb)(gpointer, const int, const gchar *,
                                        const gchar *, const gchar *);
@@ -99,16 +100,6 @@ typedef struct proxyinfo
 	GStrv excludes;
 } proxyinfo_t;
 
-/**
- * BSSinformation for the service
- *
- */
-typedef struct bssinfo
-{
-	gchar bssid[18]; /* "20:AA:4B:DB:C5:A8" */
-	gint signal;
-	gint frequency;
-} bssinfo_t;
 
 typedef struct peer
 {
@@ -189,6 +180,13 @@ typedef struct connman_service
 
 	/** Array of bssinfo */
 	GArray* bss;
+	/* LG's connman lists every access point in a "BSS" property; once one has
+	 * come, bss is that list. Upstream connman with LuneOS's patch 0006 only
+	 * publishes the access point the service would use, as "BSSID" and
+	 * "Frequency"; bss is then made from those and "Strength". */
+	gboolean bss_listed;
+	gchar ap_bssid[18];
+	guint ap_frequency;
 
 	/* this is a indicator for the connection manager status update wether something has
 	 * changed which needs to be send as update to the user */

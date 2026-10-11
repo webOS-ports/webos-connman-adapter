@@ -6,6 +6,11 @@ add_executable(test-ssid-conversion test-ssid-conversion.c
 target_link_libraries(test-ssid-conversion ${GLIB2_LDFLAGS})
 add_test(NAME ssid-conversion COMMAND test-ssid-conversion)
 
+add_executable(test-bss-info test-bss-info.c
+            ${CMAKE_SOURCE_DIR}/src/bss_info.c)
+target_link_libraries(test-bss-info ${GLIB2_LDFLAGS})
+add_test(NAME bss-info COMMAND test-bss-info)
+
 add_executable(test-utils test-utils.c
             ${CMAKE_SOURCE_DIR}/src/utils.c)
 target_link_libraries(test-utils ${GLIB2_LDFLAGS})
