@@ -817,6 +817,106 @@ static gboolean check_update_is_needed(void)
 	return needed;
 }
 
+/*
+ * What subscribers of getstatus were last sent, and a second look a little
+ * later. Each update is built from what connman answers at that moment.
+ * Right after a connect connman goes online -> ready -> online within a
+ * fraction of a second, without logging the "ready", and an update can
+ * then say offline just after one that said online. On tissot one such
+ * update at boot was the last one: nothing changed afterwards that would
+ * cause another, and every subscriber, the location service among them,
+ * believed there was no internet until the next reboot. So the status is
+ * looked at again two seconds after the last update, and sent if it is not
+ * what subscribers have.
+ */
+#define STATUS_SETTLE_SECONDS 2
+
+static gchar *last_status_payload = NULL;
+static guint status_settle_timeout = 0;
+
+static gboolean status_settled(gpointer data);
+
+/**
+ * @brief Build the getstatus reply and send it to its subscribers on both
+ * service names.
+ *
+ * @param only_if_changed Send nothing when the reply is the one sent last.
+ */
+
+static void emit_status(gboolean only_if_changed)
+{
+	jvalue_ref reply = jobject_create();
+	jvalue_ref reply_deprecated = jobject_create();
+	append_connection_status(&reply, true, true);
+	// Same but without mentioning WAN and PAN as we don't support it on the
+	// com.webos.service.connectionmanager service face
+	append_connection_status(&reply_deprecated, true, false);
+
+	jschema_ref response_schema = jschema_parse(j_cstr_to_buffer("{}"),
+	                              DOMOPT_NOOPT, NULL);
+	if (response_schema)
+	{
+		const char *payload = jvalue_tostring(reply, response_schema);
+		const char *payload_deprecated = jvalue_tostring(reply_deprecated,
+		                                 response_schema);
+
+		if (only_if_changed && g_strcmp0(payload, last_status_payload) == 0)
+		{
+			WCALOG_DEBUG("connectionmanager status unchanged since the last update");
+			jschema_release(&response_schema);
+			j_release(&reply);
+			j_release(&reply_deprecated);
+			return;
+		}
+
+		WCALOG_INFO(MSGID_CONNECTION_INFO, 0, "connectionmanager_send_status : %s",payload);
+
+		g_free(last_status_payload);
+		last_status_payload = g_strdup(payload);
+
+		if (status_settle_timeout)
+		{
+			g_source_remove(status_settle_timeout);
+		}
+
+		status_settle_timeout = g_timeout_add_seconds(STATUS_SETTLE_SECONDS,
+		                        status_settled, NULL);
+
+		LSError lserror;
+		LSErrorInit(&lserror);
+
+		// com.webos.service.connectionmanager/getstatus
+		if (!LSSubscriptionReply(pLsHandle, LUNA_CATEGORY_ROOT LUNA_METHOD_GETSTATUS,
+		                        payload_deprecated, &lserror))
+		{
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+		}
+
+		// com.webos.service.connectionmanager/getStatus
+		if (!LSSubscriptionReply(pLsHandle, LUNA_CATEGORY_ROOT LUNA_METHOD_GETSTATUS2,
+		                        payload, &lserror))
+		{
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+		}
+
+		jschema_release(&response_schema);
+	}
+
+	j_release(&reply);
+	j_release(&reply_deprecated);
+}
+
+static gboolean status_settled(gpointer data)
+{
+	UNUSED(data);
+
+	status_settle_timeout = 0;
+	emit_status(TRUE);
+	return G_SOURCE_REMOVE;
+}
+
 /**
  *  @brief Callback function registered with connman manager whenever any of its properties changes.
  */
@@ -917,47 +1017,7 @@ void connectionmanager_send_status_to_subscribers(void)
 		}
 	}
 
-	jvalue_ref reply = jobject_create();
-	jvalue_ref reply_deprecated = jobject_create();
-	append_connection_status(&reply, true, true);
-	// Same but without mentioning WAN and PAN as we don't support it on the
-	// com.webos.service.connectionmanager service face
-	append_connection_status(&reply_deprecated, true, false);
-
-	jschema_ref response_schema = jschema_parse(j_cstr_to_buffer("{}"),
-	                              DOMOPT_NOOPT, NULL);
-	if (response_schema)
-	{
-		const char *payload = jvalue_tostring(reply, response_schema);
-		const char *payload_deprecated = jvalue_tostring(reply_deprecated,
-		                                 response_schema);
-
-		WCALOG_INFO(MSGID_CONNECTION_INFO, 0, "connectionmanager_send_status : %s",payload);
-
-		LSError lserror;
-		LSErrorInit(&lserror);
-
-		// com.webos.service.connectionmanager/getstatus
-		if (!LSSubscriptionReply(pLsHandle, LUNA_CATEGORY_ROOT LUNA_METHOD_GETSTATUS,
-		                        payload_deprecated, &lserror))
-		{
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-		}
-
-		// com.webos.service.connectionmanager/getStatus
-		if (!LSSubscriptionReply(pLsHandle, LUNA_CATEGORY_ROOT LUNA_METHOD_GETSTATUS2,
-		                        payload, &lserror))
-		{
-			LSErrorPrint(&lserror, stderr);
-			LSErrorFree(&lserror);
-		}
-
-		jschema_release(&response_schema);
-	}
-
-	j_release(&reply);
-	j_release(&reply_deprecated);
+	emit_status(FALSE);
 }
 
 //->Start of API documentation comment block
@@ -2201,6 +2261,9 @@ cleanup:
 static gboolean send_updated_internet_status(gpointer data)
 {
 	block_getstatus_response = 0;
+	/* While blocked, updates were held back unless an online check changed
+	 * state, so one that came in during the block has not gone out yet. */
+	emit_status(FALSE);
 	return FALSE;
 }
 
