@@ -20,3 +20,8 @@ add_executable(test-json-utils test-json-utils.c
             ${CMAKE_SOURCE_DIR}/src/json_utils.c)
 target_link_libraries(test-json-utils ${GLIB2_LDFLAGS} ${PBNJSON_C_LDFLAGS})
 add_test(NAME json-utils COMMAND test-json-utils)
+
+add_executable(test-wifi-hwaddr test-wifi-hwaddr.c
+            ${CMAKE_SOURCE_DIR}/src/wifi_hwaddr.c)
+target_link_libraries(test-wifi-hwaddr ${GLIB2_LDFLAGS})
+add_test(NAME wifi-hwaddr COMMAND test-wifi-hwaddr)

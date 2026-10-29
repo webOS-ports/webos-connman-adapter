@@ -62,6 +62,7 @@ errorText | Yes | String | Error description
 #include "wan_service.h"
 #include "wifi_setting.h"
 #include "wifi_tethering_service.h"
+#include "wifi_hwaddr.h"
 
 #define COUNTER_ACCURACY    10
 #define COUNTER_PERIOD      1
@@ -2101,7 +2102,13 @@ static void getinfo_update(void)
 	char p2p_mac_address[MAC_ADDR_STRING_LEN]={0};
 	gsize i;
 
-	if (retrieve_mac_address(CONNMAN_WIFI_INTERFACE_NAME, wifi_mac_address, MAC_ADDR_STRING_LEN) == 0)
+	/*
+	 * With per-network MAC addresses the interface carries the network's
+	 * own address while connected, so report the hardware address connman
+	 * recorded, and only the interface's when there is no such record.
+	 */
+	if (wifi_hwaddr_get(WIFI_HWADDR_DIR, CONNMAN_WIFI_INTERFACE_NAME, WIFI_HWADDR_OWNER,
+	                    wifi_mac_address, MAC_ADDR_STRING_LEN, retrieve_mac_address) >= 0)
 	{
 		if (g_strcmp0(getinfo_cur_wifi_mac_address, wifi_mac_address))
 		{
