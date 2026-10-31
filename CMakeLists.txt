@@ -180,6 +180,7 @@ set(SOURCE_FILES
     src/wifi_profile.c
     src/wifi_service.c
     src/wifi_ap_info.c
+    src/wifi_hwaddr.c
     src/wifi_setting.c
     src/wifi_scan.c
     ${GDBUS_IF_DIR}/connman-interface.c
