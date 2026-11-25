@@ -183,6 +183,7 @@ set(SOURCE_FILES
     src/wifi_hwaddr.c
     src/wifi_setting.c
     src/wifi_scan.c
+    src/wifi_secret.c
     ${GDBUS_IF_DIR}/connman-interface.c
     ${GDBUS_IF_DIR}/pacrunner-interface.c)
 

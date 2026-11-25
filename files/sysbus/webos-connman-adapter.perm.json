@@ -1,5 +1,7 @@
 {
     "com.webos.service.wifi": [
+        "auth.query",
+        "auth.unlocktoken",
         "settings.query",
         "networkconnection.query",
         "networkconnection.management",
