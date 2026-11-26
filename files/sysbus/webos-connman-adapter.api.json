@@ -69,6 +69,9 @@
         "com.webos.service.wifi/p2p/settethering",
         "com.webos.service.wifi/p2p/setwifidisplayinfo"
     ],
+    "wifi.secrets": [
+        "com.webos.service.wifi/getPassphrase"
+    ],
     "networking.query": [
         "com.webos.service.connectionmanager/checkinternetstatus",
         "com.webos.service.connectionmanager/findProxyForURL",

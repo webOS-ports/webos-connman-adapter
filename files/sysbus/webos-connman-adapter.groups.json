@@ -4,6 +4,7 @@
           "networkconnection.management": ["oem"],
           "wifi.query": ["dev"],
           "wifi.management": ["oem"],
+          "wifi.secrets": ["oem"],
           "networking.query": ["dev"]
 }
 

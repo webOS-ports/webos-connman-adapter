@@ -7,6 +7,7 @@
         {
             "service":"com.webos.service.wifi",
             "outbound":["com.webos.service.activitymanager.client",
+                        "com.webos.service.auth",
                         "com.webos.service.config",
                         "com.webos.service.connectionmanager",
                         "com.webos.service.eventmonitor",

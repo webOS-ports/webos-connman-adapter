@@ -50,6 +50,7 @@ errorText | Yes | String | Error description
 #include "wifi_setting.h"
 #include "wifi_scan.h"
 #include "wifi_ap_info.h"
+#include "wifi_secret.h"
 #include "connman_manager.h"
 #include "connman_agent.h"
 #include "lunaservice_utils.h"
@@ -4265,6 +4266,449 @@ void wifi_service_local_has_changed()
  * com.webos.service.wifi service Luna Method Table
  */
 
+//->Start of API documentation comment block
+/**
+@page com_webos_wifi com.webos.wifi
+@{
+@section com_webos_wifi_getPassphrase getPassphrase
+
+Reads back what is needed to share a saved Wi-Fi network as a QR code: its
+name, its security and its passphrase.
+
+The passphrase is only given out against the device passcode. When a PIN,
+password or pattern is set, the caller first gets an unlock token from
+com.webos.service.auth/matchDevicePasscode and passes it here; it is spent
+(purpose "reveal") on behalf of the caller's bus name, so it is good for one
+call. With no lock set no token is needed. An open network has no secret and
+is answered without either.
+
+@par Parameters
+
+Name | Required | Type | Description
+-----|--------|------|----------
+servicePath | Yes | String | The connman object path of a saved Wi-Fi service, e.g. /net/connman/service/wifi_<mac>_<ssid hex>_managed_psk
+unlockToken | No | String | Token from com.webos.service.auth/matchDevicePasscode; needed whenever a device lock is set
+
+@par Returns(Call)
+
+Name | Required | Type | Description
+-----|--------|------|----------
+returnValue | Yes | Boolean | True
+ssid | Yes | String | The network name
+security | Yes | String | "none", "wep", "psk" or "sae" (connman 2.0 reports WPA3 networks as "psk")
+passphrase | Yes | String | The passphrase, "" for an open network
+hidden | Yes | Boolean | True if the network does not broadcast its name
+
+@par Returns(Call) on failure
+
+Name | Required | Type | Description
+-----|--------|------|----------
+returnValue | Yes | Boolean | False
+errorCode | Yes | Integer | 102: no such Wi-Fi service; 105: the network is not saved; 180: its security (802.1X) cannot be shared this way; 214: the device passcode is needed (no token, or a spent or wrong one); 215: no passphrase is stored for it; 216: its name is not text a QR code can carry; 100: the passcode could not be checked
+errorText | Yes | String | What went wrong
+passcodeRequired | No | Boolean | True with errorCode 214
+
+@par Returns(Subscription)
+
+Not applicable.
+
+@}
+*/
+//->End of API documentation comment block
+
+#define AUTH_SERVICE_URI "luna://com.webos.service.auth/"
+
+typedef struct passphrase_request
+{
+	LSHandle *sh;
+	LSMessage *message;
+	gchar *service_path;
+} passphrase_request_t;
+
+static void passphrase_request_free(passphrase_request_t *req)
+{
+	LSMessageUnref(req->message);
+	g_free(req->service_path);
+	g_free(req);
+}
+
+static void reply_passcode_required(LSHandle *sh, LSMessage *message)
+{
+	LSError lserror;
+	gchar *reply;
+
+	LSErrorInit(&lserror);
+	reply = g_strdup_printf("{\"returnValue\":false,\"errorCode\":%d,"
+	                        "\"errorText\":\"The device passcode is needed\","
+	                        "\"passcodeRequired\":true}",
+	                        WCA_API_ERROR_PASSCODE_REQUIRED);
+
+	if (!LSMessageReply(sh, message, reply, &lserror))
+	{
+		LSErrorPrint(&lserror, stderr);
+		LSErrorFree(&lserror);
+	}
+
+	g_free(reply);
+}
+
+/*
+ * The saved Wi-Fi service at path, as connman listed it to us - never the
+ * caller's string alone. Replies the error and returns NULL if there is none
+ * whose secret may be shared.
+ */
+static connman_service_t *find_shareable_service(LSHandle *sh,
+        LSMessage *message, const char *path, const char **qr_security)
+{
+	connman_service_t *service = NULL;
+
+	if (NULL != manager)
+	{
+		service = connman_manager_find_service_by_path(manager->wifi_services, path);
+	}
+
+	if (NULL == service || !connman_service_type_wifi(service) ||
+	        !wifi_secret_identifier_is_valid(service->identifier))
+	{
+		LSMessageReplyCustomError(sh, message, "Network not found",
+		                          WCA_API_ERROR_NETWORK_NOT_FOUND);
+		return NULL;
+	}
+
+	if (!service->favorite)
+	{
+		LSMessageReplyCustomError(sh, message, "Network is not saved",
+		                          WCA_API_ERROR_PROFILE_NOT_FOUND);
+		return NULL;
+	}
+
+	*qr_security = wifi_secret_qr_security((const char *const *) service->security);
+
+	if (NULL == *qr_security)
+	{
+		LSMessageReplyCustomError(sh, message,
+		                          "This network's security cannot be shared",
+		                          WCA_API_ERROR_WIFI_SECURITY_TYPE_INVALID);
+		return NULL;
+	}
+
+	return service;
+}
+
+static void reply_passphrase(LSHandle *sh, LSMessage *message,
+                             connman_service_t *service, const char *qr_security)
+{
+	wifi_secret_t secret = { 0 };
+	gboolean open_network = !g_strcmp0(qr_security, "none");
+	const char *ssid;
+	jvalue_ref reply;
+	const char *payload;
+	LSError lserror;
+
+	LSErrorInit(&lserror);
+
+	/* Read for the name and Hidden even when there is no secret to read. */
+	(void) wifi_secret_read_settings(CONNMAN_SAVED_PROFILE_CONFIG_DIR,
+	                                 service->identifier, &secret);
+
+	ssid = secret.ssid;
+
+	if (NULL == ssid && NULL != service->name && *service->name &&
+	        g_utf8_validate(service->name, -1, NULL))
+	{
+		ssid = service->name;
+	}
+
+	if (NULL == ssid)
+	{
+		LSMessageReplyCustomError(sh, message,
+		                          "The network name cannot be put in a QR code",
+		                          WCA_API_ERROR_SSID_NOT_SHAREABLE);
+		goto cleanup;
+	}
+
+	if (open_network)
+	{
+		wifi_secret_free(secret.passphrase);
+		secret.passphrase = NULL;
+	}
+	else if (NULL == secret.passphrase)
+	{
+		/* Provisioned through connect(): connman read it from our config. */
+		secret.passphrase = wifi_secret_read_config(CONNMAN_SAVED_PROFILE_CONFIG_DIR,
+		                    ssid, qr_security);
+
+		if (NULL == secret.passphrase)
+		{
+			LSMessageReplyCustomError(sh, message,
+			                          "No passphrase is stored for this network",
+			                          WCA_API_ERROR_PASSPHRASE_NOT_STORED);
+			goto cleanup;
+		}
+	}
+
+	reply = jobject_create();
+	jobject_put(reply, J_CSTR_TO_JVAL("returnValue"), jboolean_create(true));
+	jobject_put(reply, J_CSTR_TO_JVAL("ssid"), jstring_create(ssid));
+	jobject_put(reply, J_CSTR_TO_JVAL("security"), jstring_create(qr_security));
+	/* nocopy: the only copies of the secret are ours to wipe, and the text below. */
+	jobject_put(reply, J_CSTR_TO_JVAL("passphrase"),
+	            jstring_create_nocopy(j_cstr_to_buffer(secret.passphrase ?
+	                                  secret.passphrase : "")));
+	jobject_put(reply, J_CSTR_TO_JVAL("hidden"),
+	            jboolean_create(secret.hidden || service->hidden));
+
+	payload = jvalue_tostring_simple(reply);
+
+	if (NULL == payload || !LSMessageReply(sh, message, payload, &lserror))
+	{
+		if (LSErrorIsSet(&lserror))
+		{
+			LSErrorPrint(&lserror, stderr);
+			LSErrorFree(&lserror);
+		}
+	}
+
+	/* The serialised reply belongs to the jvalue, which frees it unwiped. */
+	if (NULL != payload)
+	{
+		explicit_bzero((char *) payload, strlen(payload));
+	}
+
+	j_release(&reply);
+
+cleanup:
+	wifi_secret_clear(&secret);
+}
+
+/* The passcode check came back good: answer, if the network is still there. */
+static void finish_passphrase_request(passphrase_request_t *req)
+{
+	const char *qr_security = NULL;
+	connman_service_t *service = find_shareable_service(req->sh, req->message,
+	                             req->service_path, &qr_security);
+
+	if (NULL != service)
+	{
+		reply_passphrase(req->sh, req->message, service, qr_security);
+	}
+}
+
+static jvalue_ref parse_auth_reply(LSMessage *reply)
+{
+	const char *payload = LSMessageGetPayload(reply);
+
+	if (NULL == payload)
+	{
+		return jinvalid();
+	}
+
+	return jdom_create(j_cstr_to_buffer(payload), jschema_all(), NULL);
+}
+
+static bool auth_reply_flag(jvalue_ref parsed, const char *key)
+{
+	jvalue_ref value = NULL;
+	bool flag = false;
+
+	if (!jis_object(parsed) ||
+	        !jobject_get_exists(parsed, j_cstr_to_buffer(key), &value) ||
+	        !jis_boolean(value))
+	{
+		return false;
+	}
+
+	jboolean_get(value, &flag);
+	return flag;
+}
+
+static void reply_auth_failure(passphrase_request_t *req)
+{
+	LSMessageReplyCustomError(req->sh, req->message,
+	                          "The device passcode could not be checked",
+	                          WCA_API_ERROR_INTERNAL);
+}
+
+static bool consume_unlock_token_cb(LSHandle *sh, LSMessage *reply, void *ctx)
+{
+	passphrase_request_t *req = ctx;
+	jvalue_ref parsed = parse_auth_reply(reply);
+
+	UNUSED(sh);
+
+	if (!auth_reply_flag(parsed, "returnValue"))
+	{
+		reply_auth_failure(req);
+	}
+	else if (!auth_reply_flag(parsed, "valid"))
+	{
+		reply_passcode_required(req->sh, req->message);
+	}
+	else
+	{
+		finish_passphrase_request(req);
+	}
+
+	j_release(&parsed);
+	passphrase_request_free(req);
+	return true;
+}
+
+static bool device_lock_mode_cb(LSHandle *sh, LSMessage *reply, void *ctx)
+{
+	passphrase_request_t *req = ctx;
+	jvalue_ref parsed = parse_auth_reply(reply);
+	jvalue_ref mode = NULL;
+
+	UNUSED(sh);
+
+	if (!auth_reply_flag(parsed, "returnValue") ||
+	        !jobject_get_exists(parsed, J_CSTR_TO_BUF("lockMode"), &mode) ||
+	        !jis_string(mode))
+	{
+		reply_auth_failure(req);
+	}
+	else if (jstring_equal2(mode, J_CSTR_TO_BUF("none")))
+	{
+		finish_passphrase_request(req);
+	}
+	else
+	{
+		reply_passcode_required(req->sh, req->message);
+	}
+
+	j_release(&parsed);
+	passphrase_request_free(req);
+	return true;
+}
+
+static bool handle_get_passphrase_command(LSHandle *sh, LSMessage *message,
+        void *context)
+{
+	UNUSED(context);
+
+	if (!connman_status_check(manager, sh, message))
+	{
+		return true;
+	}
+
+	if (!wifi_technology_status_check(sh, message))
+	{
+		return true;
+	}
+
+	jvalue_ref parsedObj = {0};
+
+	if (!LSMessageValidateSchema(sh, message,
+	                             j_cstr_to_buffer(STRICT_SCHEMA(PROPS_2(PROP(servicePath, string),
+	                                     PROP(unlockToken, string)) REQUIRED_1(servicePath))), &parsedObj))
+	{
+		return true;
+	}
+
+	jvalue_ref pathObj = NULL, tokenObj = NULL;
+	raw_buffer path_buf = {0};
+	gchar *service_path = NULL;
+	const char *qr_security = NULL;
+	connman_service_t *service;
+	passphrase_request_t *req;
+	LSError lserror;
+
+	LSErrorInit(&lserror);
+
+	if (!jobject_get_exists(parsedObj, J_CSTR_TO_BUF("servicePath"), &pathObj))
+	{
+		LSMessageReplyErrorInvalidParams(sh, message);
+		goto cleanup;
+	}
+
+	path_buf = jstring_get(pathObj);
+	service_path = g_strdup(path_buf.m_str);
+	jstring_free_buffer(path_buf);
+
+	service = find_shareable_service(sh, message, service_path, &qr_security);
+
+	if (NULL == service)
+	{
+		goto cleanup;
+	}
+
+	/* Nothing secret about an open network. */
+	if (!g_strcmp0(qr_security, "none"))
+	{
+		reply_passphrase(sh, message, service, qr_security);
+		goto cleanup;
+	}
+
+	req = g_new0(passphrase_request_t, 1);
+	req->sh = sh;
+	req->message = message;
+	req->service_path = service_path;
+	service_path = NULL;
+	LSMessageRef(message);
+
+	if (jobject_get_exists(parsedObj, J_CSTR_TO_BUF("unlockToken"), &tokenObj))
+	{
+		const char *requester = LSMessageGetSenderServiceName(message);
+		raw_buffer token_buf;
+		jvalue_ref call;
+		const char *payload;
+		bool called;
+
+		/* The token is bound to the bus name that won it; nameless callers have none. */
+		if (NULL == requester || !*requester)
+		{
+			reply_passcode_required(sh, message);
+			passphrase_request_free(req);
+			goto cleanup;
+		}
+
+		token_buf = jstring_get(tokenObj);
+		call = jobject_create();
+		jobject_put(call, J_CSTR_TO_JVAL("token"), jstring_create(token_buf.m_str));
+		jobject_put(call, J_CSTR_TO_JVAL("requester"), jstring_create(requester));
+		jobject_put(call, J_CSTR_TO_JVAL("purpose"), jstring_create("reveal"));
+		explicit_bzero((char *) token_buf.m_str, token_buf.m_len);
+		jstring_free_buffer(token_buf);
+
+		payload = jvalue_tostring_simple(call);
+		called = NULL != payload &&
+		         LSCallOneReply(sh, AUTH_SERVICE_URI "consumeUnlockToken", payload,
+		                        consume_unlock_token_cb, req, NULL, &lserror);
+
+		if (NULL != payload)
+		{
+			explicit_bzero((char *) payload, strlen(payload));
+		}
+
+		j_release(&call);
+
+		if (!called)
+		{
+			reply_auth_failure(req);
+			passphrase_request_free(req);
+		}
+	}
+	else if (!LSCallOneReply(sh, AUTH_SERVICE_URI "getDeviceLockMode", "{}",
+	                         device_lock_mode_cb, req, NULL, &lserror))
+	{
+		reply_auth_failure(req);
+		passphrase_request_free(req);
+	}
+
+cleanup:
+
+	if (LSErrorIsSet(&lserror))
+	{
+		LSErrorPrint(&lserror, stderr);
+		LSErrorFree(&lserror);
+	}
+
+	g_free(service_path);
+	j_release(&parsedObj);
+	return true;
+}
+
 static LSMethod wifi_methods[] =
 {
 	{ LUNA_METHOD_GETPROFILELIST,   handle_get_profilelist_command },
@@ -4283,6 +4727,7 @@ static LSMethod wifi_methods[] =
 	{ LUNA_METHOD_CANCELWPS,        handle_cancel_wps_command },
 	{ LUNA_METHOD_SET_COUNTRY_CODE, handle_set_country_code_command },
 	{ LUNA_METHOD_GET_COUNTRY_CODE, handle_get_country_code_command },
+	{ LUNA_METHOD_GET_PASSPHRASE,   handle_get_passphrase_command, LUNA_METHOD_FLAGS_NONE },
 	{ },
 };
 

@@ -50,6 +50,7 @@
 
 #define LUNA_METHOD_SET_COUNTRY_CODE        "setCountryCode"
 #define LUNA_METHOD_GET_COUNTRY_CODE        "getCountryCode"
+#define LUNA_METHOD_GET_PASSPHRASE          "getPassphrase"
 
 #define WIFI_ENTERPRISE_SECURITY_TYPE       "ieee8021x"
 

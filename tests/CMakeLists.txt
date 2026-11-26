@@ -25,3 +25,8 @@ add_executable(test-wifi-hwaddr test-wifi-hwaddr.c
             ${CMAKE_SOURCE_DIR}/src/wifi_hwaddr.c)
 target_link_libraries(test-wifi-hwaddr ${GLIB2_LDFLAGS})
 add_test(NAME wifi-hwaddr COMMAND test-wifi-hwaddr)
+
+add_executable(test-wifi-secret test-wifi-secret.c
+            ${CMAKE_SOURCE_DIR}/src/wifi_secret.c)
+target_link_libraries(test-wifi-secret ${GLIB2_LDFLAGS})
+add_test(NAME wifi-secret COMMAND test-wifi-secret)
