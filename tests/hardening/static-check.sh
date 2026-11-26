@@ -67,7 +67,7 @@ for d in $(webos_dirs "$C"); do
 	[ -d "$d/usr/include" ] && INC+=("-I$d/usr/include")
 done
 read -ra PKG <<<"$(pkg-config --cflags glib-2.0 gio-unix-2.0 2>/dev/null)"
-DEFS=(-D_GNU_SOURCE -DENABLE_SINGLE_PROFILE)
+DEFS=("${IMAGE_DEFS[@]}")
 
 # set_flags TREE
 set_flags() {

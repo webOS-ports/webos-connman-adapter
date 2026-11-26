@@ -16,7 +16,7 @@
 # Without -a each changed file is built at BASE too, and only warnings the
 # working tree adds are printed (compared without line numbers); the ones
 # BASE already had are counted. The flags are the recipe's, -std=gnu17
-# included (webos-connman-adapter.bb sets it).
+# included (webos-connman-adapter.bb sets it), and the image's options.
 #
 # GCC is the image's cross compiler from tmp/sysroots-components; Clang is
 # the host's, pointed at the same sysroots, which are put together in
@@ -87,7 +87,7 @@ command -v clang >/dev/null || die "no clang on the host"
 CFLAGS=(-std=gnu17 -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wformat
 	-Wformat-security -Werror=format-security -Wall -Wextra
 	-Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers
-	-D_GNU_SOURCE -DENABLE_SINGLE_PROFILE)
+	"${IMAGE_DEFS[@]}")
 ARM_FLAGS="-march=armv7-a -mthumb -mfpu=neon -mfloat-abi=hard -D_TIME_BITS=64 -D_FILE_OFFSET_BITS=64"
 
 cd "$ADAPTER" || exit 2

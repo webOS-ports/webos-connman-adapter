@@ -12,6 +12,11 @@
 ADAPTER=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=${WORK:-$HOME/.cache/webos-connman-adapter-tests}
 
+# The options webos-connman-adapter.bb builds the image with:
+# ENABLE_SCAN_ON_SOFTAP from EXTRA_OECMAKE, MULTIPLE_ROUTING_TABLE from the
+# default PACKAGECONFIG. ENABLE_SINGLE_PROFILE is off.
+IMAGE_DEFS=(-D_GNU_SOURCE -DENABLE_SCAN_ON_SOFTAP -DMULTIPLE_ROUTING_TABLE)
+
 die() { echo "$(basename "$0"): $*" >&2; exit 2; }
 
 # components ARCH...: the sysroots-components dir of the first ARCH there
