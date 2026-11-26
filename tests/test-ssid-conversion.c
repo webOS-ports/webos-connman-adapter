@@ -74,8 +74,17 @@ static void test_with_invalid_arguments(void)
 
 	g_free(result);
 
-	result = convert_ssid_to_utf8("test", 10, SYSTEM_LOCALE_US);
-	g_assert(result != NULL);
+	/*
+	 * An SSID length past the end of the text: the bytes must be there,
+	 * as an SSID's are, or g_convert() reads past the literal.
+	 */
+	{
+		static const char padded[10] = "test";
+
+		result = convert_ssid_to_utf8(padded, sizeof(padded),
+							SYSTEM_LOCALE_US);
+		g_assert(result != NULL);
+	}
 
 	g_free(result);
 
@@ -119,7 +128,9 @@ static void test_with_enc_kr(void)
 {
 	char *result = NULL;
 
-	g_assert(g_utf8_validate(ssid_enc_kr_encoded, -1, NULL) == FALSE);
+	/* not NUL-terminated: give the length, -1 would read past it */
+	g_assert(g_utf8_validate(ssid_enc_kr_encoded, SSID_ENC_KR_ENCODED_LEN,
+							NULL) == FALSE);
 
 	result = convert_ssid_to_utf8(ssid_enc_kr_encoded, SSID_ENC_KR_ENCODED_LEN,
 	                              SYSTEM_LOCALE_KR);
