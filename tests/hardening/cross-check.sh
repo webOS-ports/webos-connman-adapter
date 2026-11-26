@@ -84,7 +84,7 @@ for g in "$GCC_ARM" "$GCC_A64" "$GCC_X86"; do
 done
 command -v clang >/dev/null || die "no clang on the host"
 
-CFLAGS=(-std=gnu17 -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wformat
+CFLAGS=("$IMAGE_STD" -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wformat
 	-Wformat-security -Werror=format-security -Wall -Wextra
 	-Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers
 	"${IMAGE_DEFS[@]}")

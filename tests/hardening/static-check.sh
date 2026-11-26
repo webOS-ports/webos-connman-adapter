@@ -66,12 +66,15 @@ INC=()
 for d in $(webos_dirs "$C"); do
 	[ -d "$d/usr/include" ] && INC+=("-I$d/usr/include")
 done
+# lunaprefs.h includes <json.h>, from json-c
+J=$(ls -d "$C/json-c/usr/include/json-c" "$LUNEOS_BUILDDIR"/tmp/sysroots-components/*/json-c/usr/include/json-c 2>/dev/null | head -n 1)
+[ -n "$J" ] && INC+=("-I$J" "-I$(dirname "$J")")
 read -ra PKG <<<"$(pkg-config --cflags glib-2.0 gio-unix-2.0 2>/dev/null)"
 DEFS=("${IMAGE_DEFS[@]}")
 
 # set_flags TREE
 set_flags() {
-	FL=("-I$1/src" "-I$WORK/gen" "${INC[@]}" "${PKG[@]}" "${DEFS[@]}")
+	FL=("$IMAGE_STD" "-I$1/src" "-I$WORK/gen" "${INC[@]}" "${PKG[@]}" "${DEFS[@]}")
 }
 
 run_tool() {
