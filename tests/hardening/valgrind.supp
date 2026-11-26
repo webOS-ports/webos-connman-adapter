@@ -1,0 +1,2 @@
+# valgrind suppressions for host-check.sh. Each entry says why it is not
+# an adapter defect.
